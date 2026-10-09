@@ -27,3 +27,7 @@ GitHub repository：https://github.com/0xseanlee/pi
 同一個熱點下裝置能否互通，取決於熱點是否隔離用戶端。GitHub Pages 使用 HTTPS，連接區域網路服務還需處理瀏覽器的安全限制、跨來源設定和必要權限。只儲存 IP 位址不代表已建立可用連線；正式串接時需用實際手機、瀏覽器和熱點測試。
 
 不要將密碼、存取 token 或可執行任意 shell 指令的入口放進公開的網頁程式碼。
+
+## 樹莓派的 Wi-Fi 切換
+
+樹莓派端可用 NetworkManager 儲存優先熱點，再用 systemd timer 偵測並切換。程式與操作說明見 [raspberry-pi](raspberry-pi/README.md)；網頁本身不會替樹莓派設定 Wi-Fi。

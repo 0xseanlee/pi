@@ -1,0 +1,18 @@
+[Unit]
+Description=Prefer the Pi Station phone hotspot when available
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/pi-station/prefer-hotspot.py
+TimeoutStartSec=110
+RuntimeDirectory=pi-station-wifi
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/run/pi-station-wifi
