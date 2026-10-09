@@ -7,6 +7,7 @@
 - 熱點設定 `connection.autoconnect=yes`、`connection.autoconnect-priority=999`。
 - 熱點不可用時，由 NetworkManager 選擇其他允許自動連線的已存網路。
 - 已連其他網路時，timer 約每 20–45 秒檢查一次熱點，偵測到後主動切換；切換時 SSH 會中斷。
+- 使用 NetworkManager 的 `LastSeen` 確認熱點在最近 15 秒內被掃到，避免已關閉的熱點仍留在掃描快取而觸發切換。
 - 熱點驗證失敗會嘗試恢復前一個網路，並等待 3 分鐘再試，避免持續中斷備用網路。
 - 停用 Wi-Fi 無線電時不會強制重新啟用。
 

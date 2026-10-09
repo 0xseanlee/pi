@@ -23,18 +23,37 @@ def nm(*args, timeout=40):
     ).stdout.strip()
 
 
+def recently_seen(interface, ssid):
+    visible = nm('-t', '--escape', 'no', '-f', 'SSID,DBUS-PATH', 'device',
+                 'wifi', 'list', 'ifname', interface, '--rescan', 'yes', timeout=25)
+    for row in visible.splitlines():
+        name, separator, path = row.rpartition(':')
+        if not separator or name != ssid:
+            continue
+        result = subprocess.run(
+            ['/usr/bin/busctl', 'get-property', 'org.freedesktop.NetworkManager',
+             path, 'org.freedesktop.NetworkManager.AccessPoint', 'LastSeen'],
+            capture_output=True, text=True, check=True, timeout=10,
+        )
+        last_seen = int(result.stdout.split()[1])
+        age = time.clock_gettime(time.CLOCK_BOOTTIME) - last_seen
+        if last_seen >= 0 and 0 <= age <= 15:
+            return True
+    return False
+
+
 def prefer(config, state, now):
     interface, target = config['interface'], config['uuid']
     if nm('radio', 'wifi') != 'enabled':
         return state
     current = nm('-g', 'GENERAL.CON-UUID', 'device', 'show', interface)
     if current == target:
-        return {}
+        return state
+    if current and current != '--':
+        state = {**state, 'fallback_uuid': current}
     if now < state.get('retry_after', 0):
         return state
-    visible = nm('-t', '--escape', 'no', '-f', 'SSID', 'device', 'wifi',
-                 'list', 'ifname', interface, '--rescan', 'yes', timeout=25)
-    if config['ssid'] not in visible.splitlines():
+    if not recently_seen(interface, config['ssid']):
         return state
     logging.info('Preferred hotspot detected; activating on %s', interface)
     try:
@@ -42,16 +61,17 @@ def prefer(config, state, now):
     except (subprocess.SubprocessError, OSError):
         logging.warning('Hotspot activation failed; restoring a saved network')
         try:
-            if current and current != '--':
-                nm('--wait', '25', 'connection', 'up', 'uuid', current,
+            fallback = state.get('fallback_uuid')
+            if fallback and fallback != target:
+                nm('--wait', '25', 'connection', 'up', 'uuid', fallback,
                    'ifname', interface)
             else:
                 nm('--wait', '25', 'device', 'connect', interface)
         except (subprocess.SubprocessError, OSError):
             logging.warning('Immediate fallback failed; NetworkManager will retry')
-        return {'retry_after': now + 180}
+        return {**state, 'retry_after': now + 180}
     logging.info('Connected to preferred hotspot')
-    return {}
+    return {key: value for key, value in state.items() if key != 'retry_after'}
 
 
 def main():
@@ -63,7 +83,7 @@ def main():
         state = {}
     try:
         state = prefer(config, state, time.monotonic())
-    except (subprocess.SubprocessError, OSError):
+    except (subprocess.SubprocessError, OSError, ValueError, IndexError):
         logging.warning('Wi-Fi check unavailable; leaving the connection unchanged')
         return
     STATE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
