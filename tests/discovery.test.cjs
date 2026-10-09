@@ -133,4 +133,5 @@ test('login submits only to the local TLS API, clears the input and keeps secret
   assert(!JSON.stringify(b.saved).includes('test-only-password'));
   assert.equal(b.element('#login-panel').hidden, true);
   assert.equal(b.element('#status-text').textContent, '已登入 sean');
+  assert.equal(b.element('#controls-state').textContent, '功能等待設定');
 });

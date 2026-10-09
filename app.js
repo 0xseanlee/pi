@@ -91,6 +91,8 @@
 
   function locked(text = '') {
     csrf = '';
+    $('#controls-message').textContent = '登入後，開始你的操作。';
+    $('#controls-state').textContent = '請先登入 · 功能等待設定';
     $('#login-panel').hidden = !isLocalTLS;
     $('#account-panel').hidden = true;
     $('#service-status').textContent = '需要登入';
@@ -103,6 +105,8 @@
 
   function authenticated(data) {
     csrf = data.csrf;
+    $('#controls-message').textContent = '下一個功能，由你決定。';
+    $('#controls-state').textContent = '功能等待設定';
     $('#login-panel').hidden = true;
     $('#account-panel').hidden = false;
     $('#device-note').textContent = '登入成功';
