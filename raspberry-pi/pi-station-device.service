@@ -1,0 +1,19 @@
+[Unit]
+Description=Pi Station discovery service and local dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=sean
+Group=sean
+ExecStart=/usr/bin/python3 /usr/local/lib/pi-station/device-server.py --port 8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

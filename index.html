@@ -7,39 +7,44 @@
   <meta name="description" content="你的樹莓派控制台，為同一個熱點下的裝置準備。">
   <title>Pi Station · 樹莓派控制台</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23101416'/%3E%3Ctext x='6' y='24' font-size='25' font-family='serif' fill='%23c7f36a'%3Eπ%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./style.css">
-  <script src="./app.js" defer></script>
+  <link rel="stylesheet" href="./style.css?v=0.2">
+  <script src="./app.js?v=0.2" defer></script>
 </head>
 <body>
   <div class="shell">
     <header class="topbar">
       <a class="brand" href="./" aria-label="Pi Station 首頁"><span class="brand-icon">π</span> Pi Station<span class="brand-divider">/</span><span class="brand-caption">個人控制台</span></a>
-      <span class="version">STATIC / V0.1</span>
+      <span class="version">PI STATION / V0.2</span>
     </header>
     <main>
       <div class="heading-row">
         <div><p class="eyebrow">YOUR DEVICE, YOUR CONTROL</p><h1>樹莓派工作站<span class="accent">.</span></h1><p class="intro">連上你的熱點，從這裡開始。</p></div>
-        <span class="status"><span class="status-dot"></span>尚未連線</span>
+        <span class="status" id="connection-status" role="status"><span class="status-dot"></span><span id="status-text">準備搜尋</span></span>
       </div>
       <div class="workspace">
         <section class="device-card" aria-labelledby="device-title">
           <div class="card-top"><span class="eyebrow">01 / DEVICE</span><span class="chip">Raspberry Pi</span></div>
           <div class="device-symbol" aria-hidden="true">π<span>CONTROL NODE</span></div>
-          <h2 id="device-title">我的樹莓派</h2>
-          <p class="device-note">等待接上你的裝置</p>
-          <dl class="device-facts"><div><dt>連線方式</dt><dd>同一個手機熱點</dd></div><div><dt>裝置位址</dt><dd id="device-address">尚未設定</dd></div><div><dt>控制服務</dt><dd>待設定</dd></div></dl>
-          <div class="quiet-note"><span aria-hidden="true">ⓘ</span><p>目前是控制台初版。接上樹莓派控制服務後，這裡才會顯示實際連線狀態。</p></div>
+          <h2 id="device-title">sean</h2>
+          <p class="device-note" id="device-note">正在尋找你的裝置</p>
+          <dl class="device-facts"><div><dt>連線方式</dt><dd>區域網路</dd></div><div><dt>裝置位址</dt><dd id="device-address">搜尋中</dd></div><div><dt>裝置服務</dt><dd id="service-status">等待回應</dd></div></dl>
+          <div class="quiet-note"><span aria-hidden="true">ⓘ</span><p>只有收到樹莓派服務的實際回應，才會顯示已找到裝置。</p></div>
         </section>
         <div class="right-column">
           <section class="connection-card" aria-labelledby="connection-title">
-            <div class="card-top"><span class="eyebrow">02 / CONNECTION</span><span class="small-label">連線準備</span></div>
-            <h2 id="connection-title">先找到你的樹莓派</h2><p class="section-copy">手機與樹莓派連上同一個熱點後，填入樹莓派的服務位址。</p>
+            <div class="card-top"><span class="eyebrow">02 / CONNECTION</span><span class="small-label">自動搜尋</span></div>
+            <h2 id="connection-title">打開，就開始找。</h2><p class="section-copy">不用輸入 IP。樹莓派連上你的熱點後，這裡會自動尋找它。</p>
+            <div class="discovery-state" aria-live="polite"><p id="discovery-message">正在準備搜尋…</p><p id="discovery-detail" class="help"></p></div>
+            <div class="discovery-actions"><button type="button" id="scan-button">重新搜尋</button><a id="local-link" class="local-link" href="http://sean.local:8000/">開啟樹莓派控制台</a></div>
+            <button id="stay-button" type="button" class="text-button" hidden>留在此頁</button>
+            <details class="advanced"><summary>進階：指定服務位址</summary>
             <form id="address-form">
               <label for="address">樹莓派服務位址</label>
               <div class="input-row"><input id="address" name="address" type="url" inputmode="url" placeholder="http://192.168.x.x:8000" autocomplete="off" spellcheck="false" aria-describedby="address-help" required><button type="submit">儲存位址</button></div>
-              <p id="address-help" class="help">位址會儲存在這個瀏覽器。儲存後不會自動連線。</p>
+              <p id="address-help" class="help">只有自動搜尋失敗時才需要。儲存後會立即嘗試連線。</p>
               <p id="form-message" role="status" aria-live="polite"></p>
             </form>
+            </details>
           </section>
           <section class="controls-card" aria-labelledby="controls-title">
             <div class="card-top"><span class="eyebrow">03 / CONTROLS</span><span class="small-label">等你定義</span></div>
