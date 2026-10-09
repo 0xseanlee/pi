@@ -1,39 +1,53 @@
 # Pi Station
 
-繁體中文、手機優先的樹莓派靜態控制台，適用於 GitHub Pages。無需安裝套件或編譯。
+繁體中文、手機優先的樹莓派控制台。GitHub Pages 提供入口，樹莓派提供 HTTPS 登入與裝置 API。
 
-## 目前功能
+控制台入口：[0xseanlee.me/pi](https://0xseanlee.me/pi/) · [GitHub](https://github.com/0xseanlee/pi)
 
-- 開啟頁面就自動尋找 `sean`，不需要輸入位址。
-- 支援直接存取本機服務的瀏覽器會嘗試 `sean.local:8000`、上次成功位址與已知的 iPhone 熱點小網段；找到後每 10 秒確認一次，找不到每 15 秒重試。
-- iPhone Safari 從 GitHub HTTPS 頁面自動前往 `http://sean.local:8000/`；樹莓派提供相同控制台，在同來源檢查服務。這是自動轉往本機頁面，不是宣稱 Safari 可從 GitHub 頁面直接掃描 HTTP 區域網路。
-- 只有收到正確的 Pi Station 辨識回應且主機名稱為 `sean` 才顯示找到裝置。這是辨識，不是存取授權；未提供控制指令 API。
-- 控制區等待確認功能後再實作，目前不會傳送任何指令。
+## 使用
 
-## 預覽
+1. 樹莓派連上你的熱點或同一個區域網路。
+2. 開啟控制台入口。iPhone Safari 會自動前往 [sean.local:8443](https://sean.local:8443/)，不用輸入 IP。
+3. 第一次使用時，Safari 會提示本機憑證未受信任。請本人核對這台 Pi 的憑證，再決定是否信任這個網站。不要直接信任其他裝置或不同憑證。
+4. 帳號固定 `sean`，自行輸入樹莓派的帳號密碼。密碼由 Pi 的 PAM 驗證，原密碼不會寫進網頁、GitHub、瀏覽器儲存空間或應用程式日誌。
+5. 登入有效期 30 分鐘。離開共用裝置前請按「登出」。控制功能等待指定，目前沒有執行指令的 API。
 
-在專案目錄執行 `python3 -m http.server 8080`，瀏覽 `http://localhost:8080`。直接開啟本機 HTML 檔案僅能預覽外觀，辨識服務不允許 `file://` 的跨來源請求。
+本機憑證 SHA-256（透過既有 SSH 連線取得）：
 
-## GitHub Pages
+```text
+A3:47:19:62:84:F3:D5:90:B2:77:01:A9:C1:F7:5D:E0:C9:C1:34:65:C2:25:C2:51:B6:B0:90:1D:6B:85:C8:19
+```
 
-將專案上傳到 GitHub repository 的 `main` 分支。在 repository 的 **Settings → Pages → Build and deployment → Source** 選擇 **GitHub Actions**。隨附工作流程會發布三個網頁檔案。若使用其他分支，請調整 `.github/workflows/pages.yml` 的分支名稱。
+憑證主體 `sean.local`，有效至 2027-10-09。憑證重新簽發後須透過可信管道重新核對指紋。這不是公開 CA 簽發的憑證；HTTPS 的裝置身分保障取決於首次正確核對與信任。Safari 憑證說明見 [Apple](https://support.apple.com/en-au/guide/iphone/iph1b914c6d4/ios)。不需安裝可替其他網站簽發憑證的根 CA。
 
-GitHub repository：https://github.com/0xseanlee/pi
+## 自動尋找
 
-控制台網址：https://0xseanlee.github.io/pi/
+- iPhone Safari 從公開 HTTPS 網頁直接轉往 Pi 的 HTTPS 控制台，再檢查同來源服務；不宣稱 Safari 可以直接從 GitHub 網頁掃描 HTTP 區域網路。
+- 支援本機網路請求的瀏覽器會嘗試上次成功位址、`sean.local:8000`、已知家用位址與 iPhone 熱點小網段 `172.20.10.2` 至 `.14`；找到登入服務後轉往該 Pi 的 HTTPS 頁面。
+- 公開搜尋端點只回傳固定的服務識別與登入需求，不會回傳裝置狀態。搜尋到服務不代表通過身分驗證；必須核對 HTTPS 憑證並登入。
+- 本機頁面每 10 秒檢查服務與登入是否仍有效；未找到每 15 秒重試。
+- 自動前往依賴手機能解析 `sean.local` 並連到熱點內的 Pi。網路若限制裝置互通或 Bonjour，仍可能需要進階手動位址。不要停用瀏覽器安全防護。網路限制見 [MDN](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Local_network_access)。
 
-## 樹莓派辨識服務
+## 登入與服務
 
-`raspberry-pi/device-server.py` 在連接埠 8000 提供 `/api/v1/identity` 與三個控制台靜態檔案，由 `pi-station-device.service` 開機自動啟動。控制台檔案安裝在 `/opt/pi-station/web`，程式在 `/usr/local/lib/pi-station/device-server.py`，使用 `sean` 帳號執行。
+- HTTP `:8000` 只提供 `/api/v1/discovery` 和轉往 HTTPS 的導向，拒絕密碼登入與裝置 API。
+- HTTPS `:8443` 提供三個靜態網頁檔案、`/api/v1/session`、`/api/v1/login`、`/api/v1/logout`，以及需要登入的 `/api/v1/identity`。
+- `device-server.py` 以 `sean` 執行，透過受 Unix socket 權限與 peer UID 限制的 root PAM broker `auth-server.py` 驗證帳密，不以 root 執行網頁服務。
+- PAM broker 只接受 `sean`，不提供任意帳號、shell 或密碼修改功能，並檢查帳號是否允許登入。
+- Session 使用伺服器端亂數 token 與 `__Host-`、`Secure`、`HttpOnly`、`SameSite=Strict` cookie。登入時更新 token，登出時失效；服務重啟亦會清除。
+- POST 必須使用同來源、JSON；已登入的修改操作還需要 CSRF token。登入限制每個來源 IP 每分鐘 5 次、全體每分鐘 20 次，超限回應 429。最多 32 個有效 session。
+- 未登入的裝置 API 回應 401；登出、錯誤密碼、失效 session 不能繼續取得裝置狀態。未實作的控制 API 不會執行任何指令。
+- 不允許任意檔案存取；只提供明列的靜態檔案。HTTP 與 HTTPS 兩個 listener 各限制 32 個並行請求並設逾時。
 
-Safari 的自動前往依賴手機可解析 `sean.local` 並存取熱點內的 Pi；無法保證所有熱點都支援裝置互通或 Bonjour。若本機名稱無法解析，該方式會停在瀏覽器連線錯誤頁，需要確認實際網路環境。支援 Local Network Access 的瀏覽器可能要求區域網路權限；不要停用瀏覽器安全防護。相關限制見 [MDN](https://developer.mozilla.org/en-US/docs/Web/Security/Defenses/Local_network_access)。
+部署檔案位置與更新方式見 [raspberry-pi](raspberry-pi/README.md)。TLS 使用 Python 標準函式庫，見 [Python ssl 文件](https://docs.python.org/3/library/ssl.html)；帳號授權依 [PAM account management](https://pubs.opengroup.org/onlinepubs/8329799/pam_acct_mgmt.htm)。
 
-辨識服務為唯讀，不讀取 Wi-Fi 設定、密碼或任意本機檔案，CORS 只允許這個控制台的網域及指定本機預覽來源。實際控制指令與登入驗證待功能確認後再實作。
+## 驗證
 
-驗證前端自動搜尋流程：`node --test tests/discovery.test.cjs`。
+```sh
+node --test tests/discovery.test.cjs
+python3 -m unittest discover -s tests -p 'test_*.py'
+```
 
-不要將密碼、存取 token 或可執行任意 shell 指令的入口放進公開的網頁程式碼。
+後端測試建立暫時憑證，在真實 TLS socket 上使用測試專用帳密檢查未登入阻擋、HTTP 拒絕登入、Host/Origin 限制、cookie、CSRF、登出、到期與登入限速。正式 Pi 使用系統 PAM；測試帳密不會安裝到正式 Pi。
 
-## 樹莓派的 Wi-Fi 切換
-
-樹莓派端可用 NetworkManager 儲存優先熱點，再用 systemd timer 偵測並切換。程式與操作說明見 [raspberry-pi](raspberry-pi/README.md)；網頁本身不會替樹莓派設定 Wi-Fi。
+GitHub Actions 由 `main` 發布 `index.html`、`style.css`、`app.js`。程式不需前端編譯；TLS 私鑰、Wi-Fi 密碼、SSH 密碼不放進 repository。

@@ -1,0 +1,22 @@
+[Unit]
+Description=Pi Station local sean authentication broker
+After=local-fs.target
+
+[Service]
+Type=simple
+User=root
+Group=sean
+RuntimeDirectory=pi-station-auth
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/python3 /usr/local/lib/pi-station/auth-server.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX
+UMask=0007
+
+[Install]
+WantedBy=multi-user.target

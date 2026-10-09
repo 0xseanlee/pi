@@ -1,12 +1,14 @@
 [Unit]
-Description=Pi Station discovery service and local dashboard
-After=network.target
+Description=Pi Station HTTPS dashboard and authenticated device API
+After=network.target pi-station-auth.service
+Wants=pi-station-auth.service
 
 [Service]
 Type=simple
 User=sean
 Group=sean
-ExecStart=/usr/bin/python3 /usr/local/lib/pi-station/device-server.py --port 8000
+LoadCredential=tls-key:/etc/pi-station/server.key
+ExecStart=/usr/bin/python3 /usr/local/lib/pi-station/device-server.py --port 8000 --tls-port 8443 --cert /etc/pi-station/server.crt --key ${CREDENTIALS_DIRECTORY}/tls-key
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=yes

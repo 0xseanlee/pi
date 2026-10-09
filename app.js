@@ -12,7 +12,8 @@
   const stayButton = $('#stay-button');
   let activeAddress = '', savedAddress = '', generation = 0;
   let retryTimer, handoffTimer;
-  let pausedHandoff = false;
+  let pausedHandoff = false, csrf = '';
+  const isLocalTLS = location.protocol === 'https:' && localHost(location.hostname);
   const controllers = new Set();
 
   function localHost(host) {
@@ -42,6 +43,7 @@
 
   function candidates() {
     const own = localHost(location.hostname) ? location.origin : '';
+    if (isLocalTLS) return [own];
     const addresses = [own, savedAddress, 'http://sean.local:8000', 'http://192.168.68.63:8000'];
     // 這台 iPhone 熱點曾分配 172.20.10.6/28，只搜尋該小網段的服務。
     for (let n = 2; n <= 14; n++) addresses.push(`http://172.20.10.${n}:8000`);
@@ -58,13 +60,13 @@
     controllers.add(controller);
     const timeout = setTimeout(() => controller.abort(), 4000);
     try {
-      const response = await fetch(`${address}/api/v1/identity`, {
+      const response = await fetch(`${address}/api/v1/discovery`, {
         signal: controller.signal, cache: 'no-store', credentials: 'omit', mode: 'cors',
         referrerPolicy: 'no-referrer', targetAddressSpace: 'local',
       });
       if (!response.ok) throw new Error('服務未回應');
       const device = await response.json();
-      if (device.service !== 'pi-station' || device.api_version !== 1 || device.hostname !== 'sean') {
+      if (device.service !== 'pi-station' || device.api_version !== 1 || device.device_id !== 'sean' || device.login_required !== true || device.tls_port !== 8443) {
         throw new Error('不是 sean 的樹莓派服務');
       }
       return device;
@@ -87,17 +89,74 @@
     if (!document.hidden) retryTimer = setTimeout(fn, delay);
   }
 
-  function found(address) {
+  function locked(text = '') {
+    csrf = '';
+    $('#login-panel').hidden = !isLocalTLS;
+    $('#account-panel').hidden = true;
+    $('#service-status').textContent = '需要登入';
+    $('#device-note').textContent = '已找到裝置，尚未登入';
+    setState('locked', '需要登入');
+    discovery.textContent = '找到 sean 了，請先登入。';
+    detail.textContent = '使用樹莓派 sean 帳號的密碼。其他人即使打開這個網址，也需要登入。';
+    if (text) $('#login-message').textContent = text;
+  }
+
+  function authenticated(data) {
+    csrf = data.csrf;
+    $('#login-panel').hidden = true;
+    $('#account-panel').hidden = false;
+    $('#device-note').textContent = '登入成功';
+    $('#service-status').textContent = '已驗證 sean';
+    setState('connected', '已登入 sean');
+    discovery.textContent = '歡迎回來，sean。';
+    detail.textContent = '登入有效期間最多 30 分鐘；離開共用裝置前請登出。控制功能等待你設定。';
+    $('#login-message').textContent = '';
+  }
+
+  async function api(path, body) {
+    if (!isLocalTLS) throw new Error('請在樹莓派 HTTPS 控制台登入。');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    controllers.add(controller);
+    try {
+      const response = await fetch(`/api/v1/${path}`, {
+        method: body ? 'POST' : 'GET', credentials: 'same-origin', cache: 'no-store',
+        signal: controller.signal,
+        headers: body ? { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) } : {},
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(response.status === 429 ? '嘗試次數過多，請等 60 秒再試。' :
+          response.status === 401 ? '帳號或密碼不正確，或登入已過期。' : '無法完成操作，請重新整理後再試。');
+      }
+      return data;
+    } finally {
+      clearTimeout(timeout);
+      controllers.delete(controller);
+    }
+  }
+
+  async function refreshSession() {
+    const data = await api('session');
+    if (data.authenticated && data.username === 'sean' && typeof data.csrf === 'string') authenticated(data);
+    else locked();
+  }
+
+  function secureAddress(address) {
+    const url = new URL(address);
+    return `https://${url.hostname}:8443`;
+  }
+
+  async function found(address) {
     activeAddress = savedAddress = address;
     try { localStorage.setItem(storageKey, address); } catch { /* 可繼續使用。 */ }
     display.textContent = address;
-    $('#device-note').textContent = '裝置正在回應';
-    $('#service-status').textContent = '已回應';
-    setState('connected', '已找到 Pi');
-    discovery.textContent = '找到 sean 了。';
-    detail.textContent = '會定期確認裝置是否仍在線。控制功能等待設定。';
-    $('#local-link').href = `${address}/`;
+    $('#local-link').href = `${secureAddress(address)}/`;
     scanButton.disabled = false;
+    if (!isLocalTLS || address !== location.origin) { handoff(secureAddress(address)); return; }
+    locked();
+    try { await refreshSession(); } catch { locked('暫時無法確認登入狀態，請重試。'); }
     schedule(heartbeat, 10000);
   }
 
@@ -105,6 +164,8 @@
     const run = generation;
     try {
       await identify(activeAddress);
+      if (run !== generation) return;
+      if (isLocalTLS) await refreshSession();
       if (run === generation) schedule(heartbeat, 10000);
     } catch {
       if (run === generation) scan();
@@ -116,23 +177,26 @@
   const needsLocalPage = location.protocol === 'https:' && !localHost(location.hostname) &&
     isIOS && !('targetAddressSpace' in Request.prototype);
 
-  function handoff(address = 'http://sean.local:8000') {
+  function handoff(address = 'https://sean.local:8443') {
     stop();
     setState('handoff', '正在開啟本機控制台');
     display.textContent = '等待本機服務確認';
     $('#device-note').textContent = '前往樹莓派控制台';
     discovery.textContent = '正在開啟樹莓派上的控制台…';
-    detail.textContent = 'Safari 需要在樹莓派上確認連線。不用輸入 IP；請保持手機熱點開啟。';
+    detail.textContent = '即將開啟 Pi 的 HTTPS 登入頁。首次使用請核對本機憑證；密碼只在這台 Pi 的頁面輸入。';
     $('#local-link').href = `${address}/`;
     stayButton.hidden = false;
     handoffTimer = setTimeout(() => location.assign(`${address}/`), 1500);
   }
 
   async function scan(preferred) {
-    if (needsLocalPage) { handoff(preferred); return; }
+    if (needsLocalPage || (localHost(location.hostname) && location.protocol !== 'https:')) { handoff(preferred ? secureAddress(preferred) : undefined); return; }
     stop();
     const run = generation;
     activeAddress = '';
+    csrf = '';
+    $('#login-panel').hidden = true;
+    $('#account-panel').hidden = true;
     setState('searching', '正在搜尋');
     scanButton.disabled = true;
     display.textContent = '搜尋中';
@@ -166,6 +230,30 @@
     schedule(scan, 15000);
   }
 
+  $('#login-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const password = $('#password');
+    const button = $('#login-button');
+    if (!isLocalTLS || button.disabled) return;
+    button.disabled = true;
+    $('#login-message').textContent = '正在驗證…';
+    try {
+      const result = await api('login', { username: 'sean', password: password.value });
+      authenticated(result);
+    } catch (error) {
+      locked(error.name === 'AbortError' ? '連線逾時，請重試。' : error.message);
+    } finally {
+      password.value = '';
+      button.disabled = false;
+    }
+  });
+  $('#logout-button').addEventListener('click', async () => {
+    const button = $('#logout-button');
+    button.disabled = true;
+    try { await api('logout', {}); locked('已登出。'); }
+    catch (error) { detail.textContent = `登出尚未確認：${error.message}`; }
+    finally { button.disabled = false; }
+  });
   scanButton.addEventListener('click', () => { pausedHandoff = false; scan(); });
   function pauseHandoff() {
     stop();
