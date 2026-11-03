@@ -1,11 +1,11 @@
 {
   "index.html": {
     "destination": "/opt/pi-station/web/index.html",
-    "sha256": "06bbe860b65dd69c021887ee6fc8d7fa57caf0962d8bf371e49ef336e8b47d0b"
+    "sha256": "9e4c08826cb7e7d4bb1a47db2d3da48f350708cdc689a21dd4edd7bd960b4d91"
   },
   "style.css": {
     "destination": "/opt/pi-station/web/style.css",
-    "sha256": "118eb87fb4d542fc29a8d4f9d2d888289134968075fc266ec9e640745d945a36"
+    "sha256": "2f487fb323bd03acae3df856ae27826e1d1ab5044e651b2fc993451332a86b8d"
   },
   "app.js": {
     "destination": "/opt/pi-station/web/app.js",
@@ -13,11 +13,11 @@
   },
   "control.js": {
     "destination": "/opt/pi-station/web/control.js",
-    "sha256": "24e8c642dc75075a6b8c6991d2395cf61cb4cd483fe7aab1128a6a059bb1b43e"
+    "sha256": "fcd8f730a0df8769ffd7f5e12ddc6ab32d4c4fb170358cafbb0ebdde017be18e"
   },
   "raspberry-pi/device-server.py": {
     "destination": "/usr/local/lib/pi-station/device-server.py",
-    "sha256": "e892e306562263e467fac3a7862fbff33640a4bdd5545def120fa69377ace30f"
+    "sha256": "177a2fc0c682331025d1dd038bc4a6fcd52736ff166fcac32aaec2e0b24c5f5e"
   },
   "raspberry-pi/auth-server.py": {
     "destination": "/usr/local/lib/pi-station/auth-server.py",
@@ -25,7 +25,7 @@
   },
   "raspberry-pi/control.py": {
     "destination": "/usr/local/lib/pi-station/control.py",
-    "sha256": "50f2234971b24e84f291ea5edf09b26cdab1120f1f26a6678397f3601662db16"
+    "sha256": "05a758e673b49c82edf844cb6d39a5f5bc5ecf69938cc877fae4a75f777ae2c9"
   },
   "raspberry-pi/pi-station-device.service": {
     "destination": "/etc/systemd/system/pi-station-device.service",

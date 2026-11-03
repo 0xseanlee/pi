@@ -118,3 +118,47 @@ class Controls(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.control.network(dict(op='update', uuid=key, name='phone', ssid=ssid,
                         autoconnect=auto, priority=999, password=''))
+
+    def wait_execution(self, key):
+        for _ in range(100):
+            result = self.control.execute(dict(op='poll', id=key), 'one')
+            if result['exited']:
+                return result
+            time.sleep(.03)
+        self.fail('execution did not finish')
+
+    def test_immediate_command_collects_stdout_stderr_and_exit_code(self):
+        key = self.control.execute(dict(command='echo STDOUT; echo STDERR >&2; exit 7'), 'one')['id']
+        result = self.wait_execution(key)
+        self.assertEqual(result['returncode'], 7)
+        self.assertIn('STDOUT', result['output'])
+        self.assertIn('STDERR', result['output'])
+        self.control.execute(dict(op='stop', id=key), 'one')
+        self.assertFalse(self.control.state.exists())
+
+    def test_immediate_file_arguments_cwd_and_interactive_input(self):
+        folder = self.root / 'project'
+        folder.mkdir()
+        (folder / 'config.txt').write_text('CONFIG_OK')
+        program = folder / 'hello world.py'
+        program.write_text('import sys\nfrom pathlib import Path\nprint(sys.argv[1:])\nprint(Path("config.txt").read_text())\nprint("REPLY="+input("value:"))\n')
+        key = self.control.execute(dict(kind='file', file='project/hello world.py',
+            arguments='"two words" ";touch injected"', cwd='project'), 'one')['id']
+        with self.assertRaises(ValueError):
+            self.control.execute(dict(op='input', id=key, data='wrong\n'), 'two')
+        self.control.execute(dict(op='input', id=key, data='INPUT_OK\n'), 'one')
+        result = self.wait_execution(key)
+        self.assertEqual(result['returncode'], 0)
+        for text in ('two words', ';touch injected', 'CONFIG_OK', 'REPLY=INPUT_OK'):
+            self.assertIn(text, result['output'])
+        self.assertFalse((folder / 'injected').exists())
+        self.control.execute(dict(op='stop', id=key), 'one')
+
+    def test_immediate_stop_removes_execution_and_path_escape_rejected(self):
+        key = self.control.execute(dict(command='sleep 60'), 'one')['id']
+        result = self.control.execute(dict(op='stop', id=key), 'one')
+        self.assertIsNotNone(result['returncode'])
+        with self.assertRaises(ValueError):
+            self.control.execute(dict(op='poll', id=key), 'one')
+        with self.assertRaises(ValueError):
+            self.control.execute(dict(kind='file', file='../escape.py'), 'one')

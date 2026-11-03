@@ -3,6 +3,7 @@
   const $ = (s) => document.querySelector(s);
   let csrf = '', ready = false, folder = '.', editing = '', dirty = false;
   let terminal = '', cursor = 0, polling = false, terminalTimer;
+  let runId = '', runCursor = 0, runTimer, runPolling = false;
   const bytes = (n) => n >= 1073741824 ? `${(n / 1073741824).toFixed(1)} GiB` : `${(n / 1048576).toFixed(1)} MiB`;
   const quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
   const join = (name) => folder === '.' ? name : `${folder}/${name}`;
@@ -21,7 +22,7 @@
       const button = event.currentTarget;
       button.disabled = true;
       try { await fn(); } catch (e) { message(e.message, true); }
-      finally { button.disabled = false; }
+      finally { button.disabled = selector === '#run-stop' && !runId; }
     });
   }
   function form(selector, fn) {
@@ -30,7 +31,7 @@
       const button = event.currentTarget.querySelector('button[type="submit"]');
       button.disabled = true;
       try { await fn(); } catch (e) { message(e.message, true); }
-      finally { button.disabled = false; }
+      finally { button.disabled = selector === '#run-form' && !!runId; }
     });
   }
   function tab(name) {
@@ -48,6 +49,7 @@
   }));
   function lock() {
     csrf = ''; ready = false; terminal = ''; clearTimeout(terminalTimer);
+    runId = ''; clearTimeout(runTimer); $('#run-stop').disabled = true; $('#run-start').disabled = false; $('#run-status').textContent = '未執行';
     $('#workbench').hidden = true;
     document.body.classList.remove('logged-in');
   }
@@ -204,7 +206,70 @@
     const path = await save(); tab('terminal'); await openTerminal();
     await api('terminal', { op: 'input', id: terminal, data: `cd ~ && ${runner} ${quote(path)}\n` });
   });
-  let editingJob = '', pickerFolder = '.', editingNetwork = '';
+  function runMode() {
+    const isFile = $('#run-kind').value === 'file';
+    $('#run-command-fields').hidden = isFile;
+    $('#run-file-fields').hidden = !isFile;
+    $('#run-command').required = !isFile;
+    $('#run-file').required = isFile;
+  }
+  $('#run-kind').addEventListener('change', runMode);
+  function runOutput(text) {
+    const output = $('#run-output');
+    const clean = text.replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, '').replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '').replace(/\r/g, '');
+    output.textContent = (output.textContent + clean).slice(-262144);
+    output.scrollTop = output.scrollHeight;
+  }
+  async function pollRun() {
+    if (!runId || !csrf || runPolling) return;
+    runPolling = true;
+    const id = runId;
+    try {
+      const data = await api('execute', { op: 'poll', id, cursor: runCursor });
+      if (runId !== id) return;
+      runOutput(data.output); runCursor = data.cursor;
+      if (data.exited) {
+        $('#run-status').textContent = `已結束 · 退出碼 ${data.returncode}`;
+        await api('execute', { op: 'stop', id });
+        if (runId === id) runId = '';
+        $('#run-start').disabled = false; $('#run-stop').disabled = true;
+      }
+    } catch (e) {
+      if (runId === id) { $('#run-status').textContent = '無法取得執行狀態'; message(e.message, true); }
+    } finally {
+      runPolling = false;
+      if (runId) runTimer = setTimeout(pollRun, document.hidden ? 5000 : 700);
+    }
+  }
+  form('#run-form', async () => {
+    if (runId) throw new Error('請先停止目前執行中的程式');
+    const data = await api('execute', { op: 'start', kind: $('#run-kind').value,
+      command: $('#run-command').value, file: $('#run-file').value.trim(),
+      arguments: $('#run-arguments').value, cwd: $('#run-cwd').value });
+    runId = data.id; runCursor = 0;
+    $('#run-output').textContent = ''; $('#run-status').textContent = '執行中';
+    $('#run-stop').disabled = false;
+    clearTimeout(runTimer); pollRun();
+  });
+  action('#run-stop', async () => {
+    if (!runId) return;
+    const id = runId;
+    const data = await api('execute', { op: 'stop', id });
+    if (runId !== id) return;
+    runId = ''; clearTimeout(runTimer);
+    $('#run-status').textContent = `已停止 · 退出碼 ${data.returncode}`;
+    $('#run-start').disabled = false;
+  });
+  form('#run-input-form', async () => {
+    if (!runId) throw new Error('沒有執行中的程式');
+    await api('execute', { op: 'input', id: runId, data: $('#run-input').value + '\n' });
+    $('#run-input').value = '';
+  });
+  action('#run-file-pick', async () => {
+    pickerTarget = 'run'; pickerFolder = folder; $('#file-picker').showModal();
+    try { await picker(); } catch (e) { $('#picker-message').textContent = e.message; }
+  });
+  let editingJob = '', pickerFolder = '.', editingNetwork = '', pickerTarget = 'job';
   function jobMode() {
     const isFile = $('#job-kind').value === 'file';
     $('#job-command-fields').hidden = isFile;
@@ -288,8 +353,8 @@
         try {
           if (item.directory) { pickerFolder = item.path; await picker(); }
           else {
-            $('#job-file').value = item.path;
-            $('#job-cwd').value = item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : '.';
+            $(`#${pickerTarget}-file`).value = item.path;
+            $(`#${pickerTarget}-cwd`).value = item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : '.';
             $('#file-picker').close();
           }
         } catch (e) { $('#picker-message').textContent = e.message; }
@@ -299,6 +364,7 @@
     $('#picker-message').textContent = $('#picker-list').childElementCount ? '' : '沒有可選的程式檔案。';
   }
   action('#job-file-pick', async () => {
+    pickerTarget = 'job';
     pickerFolder = folder; $('#file-picker').showModal();
     try { await picker(); } catch (e) { $('#picker-message').textContent = e.message; }
   });

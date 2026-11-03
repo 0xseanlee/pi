@@ -147,7 +147,7 @@ class Control:
             for key in [key for key, t in self.terminals.items() if t['owner'] == owner]:
                 self.close_terminal(key)
 
-    def terminal(self, request, owner):
+    def terminal(self, request, owner, argv=None):
         operation = request.get('op', 'poll')
         with self.lock:
             if operation == 'open':
@@ -155,7 +155,7 @@ class Control:
                     raise ValueError('終端機數量已達上限，請先關閉舊連線')
                 master, slave = pty.openpty()
                 try:
-                    process = subprocess.Popen(['/bin/bash', '--noprofile', '--norc', '-i'],
+                    process = subprocess.Popen(argv or ['/bin/bash', '--noprofile', '--norc', '-i'],
                         stdin=slave, stdout=slave, stderr=slave, start_new_session=True,
                         cwd=self.path(request.get('cwd', '.')),
                         env={**os.environ, 'TERM': 'dumb', 'PS1': 'sean@pi:\\w $ ',
@@ -167,7 +167,7 @@ class Control:
                     os.close(slave)
                 key = secrets.token_urlsafe(24)
                 terminal = dict(owner=owner, fd=master, process=process,
-                                seen=time.monotonic(), output='', offset=0)
+                                seen=time.monotonic(), output='', offset=0, eof=False)
                 self.terminals[key] = terminal
                 threading.Thread(target=self.read_terminal, args=(key, terminal), daemon=True).start()
                 return dict(id=key)
@@ -178,7 +178,7 @@ class Control:
             terminal['seen'] = time.monotonic()
             if operation == 'close':
                 self.close_terminal(key)
-                return dict(ok=True)
+                return dict(ok=True, returncode=terminal['process'].returncode)
             if operation == 'input':
                 data = request.get('data', '')
                 if not isinstance(data, str) or len(data.encode()) > 4096:
@@ -191,8 +191,9 @@ class Control:
                 raise ValueError('未知終端機操作')
             cursor = max(int(request.get('cursor', 0)), terminal['offset'])
             output = terminal['output'][cursor - terminal['offset']:]
+            returncode = terminal['process'].poll()
             return dict(output=output, cursor=terminal['offset'] + len(terminal['output']),
-                        exited=terminal['process'].poll() is not None)
+                        exited=returncode is not None and terminal['eof'], returncode=returncode)
 
     def read_terminal(self, key, terminal):
         decoder = codecs.getincrementaldecoder('utf-8')(errors='replace')
@@ -210,6 +211,40 @@ class Control:
                 trim = max(0, len(terminal['output']) - 262144)
                 terminal['output'] = terminal['output'][trim:]
                 terminal['offset'] += trim
+        with self.lock:
+            terminal['eof'] = True
+
+    def execute(self, request, owner):
+        operation = request.get('op', 'start')
+        if operation != 'start':
+            if operation not in ('poll', 'input', 'stop'):
+                raise ValueError('未知執行操作')
+            return self.terminal({**request, 'op': 'close' if operation == 'stop' else operation}, owner)
+        import shlex
+        kind = request.get('kind', 'command')
+        if kind == 'file':
+            name = request.get('file', '')
+            if not name:
+                raise ValueError('請選擇程式檔案')
+            target = self.path(name)
+            runner = {'.py': ['python3', '-u'], '.sh': ['bash'], '.js': ['node']}.get(target.suffix.lower())
+            if not target.is_file() or not runner:
+                raise ValueError('請選擇 Python、Shell 或 JavaScript 程式檔案')
+            arguments = request.get('arguments', '')
+            if not isinstance(arguments, str) or len(arguments) > 4000 or '\0' in arguments:
+                raise ValueError('無效程式參數')
+            argv = runner + [str(target)] + shlex.split(arguments)
+        elif kind == 'command':
+            command = request.get('command', '')
+            if not isinstance(command, str) or not command.strip() or len(command) > 16000 or '\0' in command:
+                raise ValueError('請輸入有效指令')
+            argv = ['/bin/bash', '-lc', command]
+        else:
+            raise ValueError('未知執行方式')
+        cwd = self.path(request.get('cwd', '.'))
+        if not cwd.is_dir():
+            raise ValueError('工作目錄不存在')
+        return self.terminal(dict(op='open', cwd=self.relative(cwd)), owner, argv)
 
     def userctl(self, *args):
         return self.run(['systemctl', '--user', *args])
@@ -402,6 +437,8 @@ class Control:
             return self.files(request)
         if action == 'terminal':
             return self.terminal(request, owner)
+        if action == 'execute':
+            return self.execute(request, owner)
         if action == 'jobs':
             return self.jobs(request)
         if action == 'network':

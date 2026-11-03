@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="樹莓派管理">
   <title>樹莓派管理</title>
-  <link rel="stylesheet" href="./style.css?v=1.2">
-  <script src="./app.js?v=1.2" defer></script>
-  <script src="./control.js?v=1.2" defer></script>
+  <link rel="stylesheet" href="./style.css?v=1.3">
+  <script src="./app.js?v=1.3" defer></script>
+  <script src="./control.js?v=1.3" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -59,6 +59,7 @@
               <nav class="tabs" aria-label="工作台分頁">
                 <button type="button" data-tab="overview" aria-selected="true">總覽</button>
                 <button type="button" data-tab="files">檔案</button>
+                <button type="button" data-tab="execute">立即執行</button>
                 <button type="button" data-tab="terminal">Terminal</button>
                 <button type="button" data-tab="jobs">背景任務</button>
                 <button type="button" data-tab="network">網路</button>
@@ -79,6 +80,18 @@
                   <div class="button-row"><button type="button" id="file-save">儲存</button><button type="button" id="file-run" class="secondary">儲存並執行</button><button type="button" id="editor-close" class="secondary">關閉編輯器</button></div>
                   <p class="help">可直接執行 .py、.sh、.js；C/C++ 請於 Terminal 編譯。</p>
                 </div>
+              </section>
+              <section class="pane" data-pane="execute" hidden>
+                <div class="pane-heading"><h3>立即執行</h3><span id="run-status" class="help" role="status">未執行</span></div>
+                <form id="run-form">
+                  <label for="run-kind">執行方式</label><select id="run-kind"><option value="command">指令</option><option value="file">程式檔案</option></select>
+                  <div id="run-command-fields"><label for="run-command">指令</label><textarea id="run-command" class="code-editor" rows="3" required spellcheck="false" placeholder="python3 main.py"></textarea></div>
+                  <div id="run-file-fields" hidden><label for="run-file">程式檔案</label><div class="input-row"><input id="run-file" placeholder="程式路徑"><button type="button" id="run-file-pick" class="secondary">選擇檔案</button></div><label for="run-arguments">程式參數</label><input id="run-arguments" spellcheck="false" placeholder="選填"></div>
+                  <label for="run-cwd">工作目錄（相對家目錄）</label><input id="run-cwd" value="." required>
+                  <div class="button-row"><button type="submit" id="run-start">立即執行</button><button type="button" id="run-stop" class="secondary" disabled>停止</button></div>
+                </form>
+                <pre id="run-output" class="terminal-output" tabindex="0" aria-label="執行輸出"></pre>
+                <form id="run-input-form" class="terminal-form"><label class="sr-only" for="run-input">程式輸入</label><input id="run-input" placeholder="程式要求的輸入" autocomplete="off" spellcheck="false" autocapitalize="off"><button type="submit">送出</button></form>
               </section>
               <section class="pane" data-pane="terminal" hidden>
                 <div class="pane-heading"><h3>互動 Shell</h3><button type="button" id="terminal-open">開啟終端機</button></div>

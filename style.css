@@ -11,3 +11,5 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 
 select{font:inherit;font-size:16px;background:#fff;color:var(--text);border:1px solid #cdd2da;border-radius:6px;padding:10px 12px;width:100%}#network-form{display:grid;gap:10px;border:1px solid var(--line);border-radius:7px;padding:16px;margin:16px 0}#network-form label{margin:0}#network-form h4{margin:0 0 8px}#job-file-fields label{margin-top:10px}dialog{width:min(600px,calc(100% - 24px));max-height:80dvh;border:1px solid var(--line);border-radius:10px;padding:20px;color:var(--text);background:white}dialog::backdrop{background:#20242b55}dialog .pane-heading{margin-top:0}.profile-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:12px 0}.profile-row span{overflow-wrap:anywhere}details summary{cursor:pointer;color:var(--muted);font-size:13px;margin:12px 0}#job-list{margin-bottom:18px}
+
+#run-form{display:grid;gap:10px}#run-form label{margin:0}#run-file-fields label{margin-top:10px}#run-status{margin:0;white-space:nowrap}#run-input-form{margin-top:12px}

@@ -230,7 +230,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(401, {'error': 'login_required'}, head=head)
         elif path == '/api/v1/identity':
             self.reply(200, {'service': 'pi-station', 'api_version': 1, 'hostname': socket.gethostname(),
-                             'capabilities': ['discovery', 'login', 'files', 'terminal', 'jobs', 'network']}, head=head)
+                             'capabilities': ['discovery', 'login', 'files', 'execute', 'terminal', 'jobs', 'network']}, head=head)
         else:
             self.reply(404, {'error': 'not_found'}, head=head)
 
