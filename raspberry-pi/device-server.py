@@ -147,12 +147,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Referrer-Policy', 'no-referrer')
         self.send_header('X-Frame-Options', 'DENY')
         self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-        if self.path.split('?')[0] == '/api/v1/discovery':
+        if self.path.startswith('/api/v1/'):
             self.send_header('Vary', 'Origin')
             origin = self.headers.get('Origin')
             if origin in ALLOWED_ORIGINS:
                 self.send_header('Access-Control-Allow-Origin', origin)
-                self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+                self.send_header('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token')
                 self.send_header('Access-Control-Allow-Private-Network', 'true')
         for key, value in (headers or {}).items():
             self.send_header(key, value)
@@ -172,6 +173,9 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def token(self):
+        authorization = self.headers.get('Authorization', '')
+        if authorization.startswith('Bearer '):
+            return authorization[7:]
         try:
             cookies = SimpleCookie(self.headers.get('Cookie', ''))
             return cookies[COOKIE].value if COOKIE in cookies else ''
@@ -180,10 +184,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def authorized_origin(self, mutation=False):
         origin = self.headers.get('Origin')
-        return origin == self.own_origin() if mutation else not origin or origin == self.own_origin()
+        allowed = origin == self.own_origin() or origin in ALLOWED_ORIGINS
+        return allowed if mutation else not origin or allowed
 
     def do_OPTIONS(self):
-        if not self.safe_host() or self.path != '/api/v1/discovery' or self.headers.get('Origin') not in ALLOWED_ORIGINS:
+        if not self.safe_host() or not self.path.startswith('/api/v1/') or self.headers.get('Origin') not in ALLOWED_ORIGINS:
             self.reply(403, {'error': 'origin_not_allowed'})
         else:
             self.reply(204)
@@ -267,7 +272,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(code, {'error': 'too_many_attempts' if code == 429 else 'invalid_credentials'}, headers={'Retry-After': '60'} if code == 429 else None)
                 return
             token, csrf = result
-            self.reply(200, {'authenticated': True, 'username': 'sean', 'csrf': csrf}, headers={
+            result = {'authenticated': True, 'username': 'sean', 'csrf': csrf}
+            if self.headers.get('Origin') in ALLOWED_ORIGINS and self.headers.get('Origin') != self.own_origin():
+                result['token'] = token
+            self.reply(200, result, headers={
                 'Set-Cookie': f'{COOKIE}={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={MAX_SECONDS}'})
             return
         session = self.server.auth.session(self.token(), touch=True)

@@ -13,22 +13,9 @@
   }
   async function api(action, body = {}) {
     if (!csrf) throw new Error('請先登入樹莓派');
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 90000);
-    try {
-      const r = await fetch(`/api/v1/control/${action}`, {
-        method: 'POST', credentials: 'same-origin', cache: 'no-store',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-        body: JSON.stringify(body), signal: controller.signal,
-      });
-      const data = await r.json();
-      if (!r.ok) {
-        if (r.status === 401) lock();
-        throw new Error(data.error || '操作失敗');
-      }
-      return data;
-    } finally { clearTimeout(timer); }
+    return window.piRequest(action, body);
   }
+
   function action(selector, fn) {
     $(selector).addEventListener('click', async (event) => {
       const button = event.currentTarget;

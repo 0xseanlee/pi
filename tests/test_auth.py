@@ -99,7 +99,7 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(self.request('/api/v1/login', 'POST', {'username': 'sean', 'password': 'test-only'}, plain=True)[0], 403)
         self.assertEqual(self.request('/', plain=True)[1]['Location'], self.origin + '/')
         self.assertEqual(self.request('/api/v1/session', headers={'Host': 'attacker.example'})[0], 403)
-        for origin in ('https://attacker.example', 'null', 'https://0xseanlee.me', ''):
+        for origin in ('https://attacker.example', 'null', ''):
             self.assertEqual(self.request('/api/v1/login', 'POST', {'username': 'sean', 'password': 'test-only'}, headers={'Origin': origin})[0], 403)
         self.assertEqual(self.request('/api/v1/login', 'POST', {}, headers={'Content-Type': 'text/plain'})[0], 415)
 
@@ -131,6 +131,22 @@ class HttpTests(unittest.TestCase):
         headers = {'Cookie': cookie, 'X-CSRF-Token': csrf}
         self.assertEqual(self.request('/api/v1/control/files', 'POST', {'path': '../escape'}, headers=headers)[0], 400)
         self.assertEqual(self.request('/api/v1/control/files', 'POST', {'path': '.'}, headers=headers)[0], 200)
+
+    def test_github_origin_bearer_login_without_third_party_cookies(self):
+        origin = 'https://0xseanlee.github.io'
+        code, headers, raw = self.request('/api/v1/login', 'POST',
+            {'username': 'sean', 'password': 'test-only'}, headers={'Origin': origin})
+        self.assertEqual(code, 200)
+        self.assertEqual(headers['Access-Control-Allow-Origin'], origin)
+        data = json.loads(raw)
+        auth = {'Origin': origin, 'Authorization': 'Bearer ' + data['token']}
+        self.assertEqual(self.request('/api/v1/control/files', 'POST', {}, headers=auth)[0], 403)
+        auth['X-CSRF-Token'] = data['csrf']
+        self.assertEqual(self.request('/api/v1/control/files', 'POST', {}, headers=auth)[0], 200)
+        self.assertEqual(self.request('/api/v1/control/files', 'POST', {}, headers={**auth, 'Origin': 'https://attacker.example'})[0], 403)
+        self.assertEqual(self.request('/api/v1/control/files', 'OPTIONS', headers={'Origin': origin})[0], 204)
+        self.assertEqual(self.request('/api/v1/logout', 'POST', {}, headers=auth)[0], 200)
+        self.assertEqual(self.request('/api/v1/control/files', 'POST', {}, headers=auth)[0], 401)
 
 if __name__ == '__main__':
     unittest.main()

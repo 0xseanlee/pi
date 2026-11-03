@@ -2,7 +2,15 @@
 
 繁體中文、手機優先的樹莓派管理網站。舊版搜尋介面作為入口輔助，主體是檔案、程式、背景任務與 Terminal。
 
-入口：[GitHub Pages](https://0xseanlee.me/pi/)；實際操作在樹莓派 https://樹莓派IP:8443/ 。
+入口：[GitHub Pages](https://0xseanlee.github.io/pi/)。v1.1 保持在 GitHub 網頁操作，不再自動跳轉到區網頁面；手機與 Pi 仍需在同一網路。
+
+## v1.1 介面更新
+
+白底介面，只保留欄位、按鈕、狀態與必要限制。移除大型 π、裝飾性英文、宣傳標語和重複說明。
+
+GitHub 頁面直接呼叫 Pi HTTPS API，跨來源登入回傳的 bearer token 僅存在當次頁面記憶體，重新整理後需重新登入。不使用第三方 Cookie，不將 token 存到 localStorage。只允許既有明列的 GitHub／自訂網域來源，仍檢查 Origin、登入及 CSRF。瀏覽器可能要求區網權限；自簽憑證須先確認信任，頁面提供另開分頁的「檢查裝置憑證」連結，沒有自動轉址。
+
+已裝 v1 的 Pi 可使用 update-console.py 更新前端及 device HTTP API，校驗雜湊並備份、失敗還原；不重裝套件、不更換憑證，也不更動 auth、Wi-Fi 或 HSSH 服務。
 
 ## 功能
 
