@@ -1,7 +1,7 @@
 {
   "index.html": {
     "destination": "/opt/pi-station/web/index.html",
-    "sha256": "9e4c08826cb7e7d4bb1a47db2d3da48f350708cdc689a21dd4edd7bd960b4d91"
+    "sha256": "22021110696bd5a514690b5be046ed8c8d612a62300a63cd575287230bcbfda2"
   },
   "style.css": {
     "destination": "/opt/pi-station/web/style.css",
@@ -9,7 +9,7 @@
   },
   "app.js": {
     "destination": "/opt/pi-station/web/app.js",
-    "sha256": "b90c011b6c3bce54605f179b962c6f4b76f07328b633a31c215d825432a95fcb"
+    "sha256": "e6af2ffea3a47072a900c2b05abbd9ebee5da9879847666a3a22949b092d9fa8"
   },
   "control.js": {
     "destination": "/opt/pi-station/web/control.js",
@@ -17,7 +17,7 @@
   },
   "raspberry-pi/device-server.py": {
     "destination": "/usr/local/lib/pi-station/device-server.py",
-    "sha256": "177a2fc0c682331025d1dd038bc4a6fcd52736ff166fcac32aaec2e0b24c5f5e"
+    "sha256": "69c5ee404ba8aa4b0cdbd266ce4a70afaf2ce662f4f19d47be22c643fa89a5b7"
   },
   "raspberry-pi/auth-server.py": {
     "destination": "/usr/local/lib/pi-station/auth-server.py",

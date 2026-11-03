@@ -205,7 +205,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(403, {'error': 'origin_not_allowed'}, head=head)
             else:
                 self.reply(200, {'service': 'pi-station', 'api_version': 1,
-                                 'device_id': 'sean', 'login_required': True, 'tls_port': self.server.tls_port}, head=head)
+                                 'device_id': 'sean', 'hostname': socket.gethostname(), 'address': self.connection.getsockname()[0], 'login_required': True, 'tls_port': self.server.tls_port}, head=head)
             return
         if not self.server.secure:
             if path in ASSETS:

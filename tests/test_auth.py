@@ -91,7 +91,7 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(json.loads(self.request('/api/v1/session')[2]), {'authenticated': False})
         discovery = json.loads(self.request('/api/v1/discovery')[2])
         self.assertTrue(discovery['login_required'])
-        self.assertNotIn('hostname', discovery)
+        self.assertEqual(discovery['hostname'], device.socket.gethostname())
         self.assertEqual(self.request('/')[0], 200)
         self.assertEqual(self.request('/../../etc/shadow')[0], 404)
 
