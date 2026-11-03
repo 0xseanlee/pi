@@ -232,24 +232,50 @@ class Control:
                                        text=True, capture_output=True, timeout=8).stdout.strip()
                 results.append({**data, 'state': state})
             return dict(jobs=results)
-        if operation == 'create':
-            command, name = request.get('command'), request.get('name', '')
+        if operation in ('create', 'update'):
+            import shlex
+            updating = operation == 'update'
+            key = self.job_id(request) if updating else secrets.token_hex(12)
+            if updating and not (self.state / (key + '.json')).is_file():
+                raise ValueError('工作不存在')
+            kind = request.get('kind', 'command')
+            selected, arguments = '', ''
+            if kind == 'file':
+                selected = request.get('file', '')
+                if not selected:
+                    raise ValueError('請選擇程式檔案')
+                target = self.path(selected)
+                if not target.is_file():
+                    raise ValueError('程式檔案不存在')
+                runner = {'.py': ['python3', '-u'], '.sh': ['bash'], '.js': ['node']}.get(target.suffix.lower())
+                if not runner:
+                    raise ValueError('支援 Python、Shell、JavaScript；其他類型請使用指令')
+                arguments = request.get('arguments', '')
+                if not isinstance(arguments, str) or len(arguments) > 4000:
+                    raise ValueError('程式參數過長')
+                command = shlex.join(runner + [str(target)] + shlex.split(arguments))
+                selected = self.relative(target)
+            elif kind == 'command':
+                command = request.get('command')
+            else:
+                raise ValueError('未知工作類型')
+            name = request.get('name', '')
             if not isinstance(command, str) or not command.strip() or len(command) > 16000:
                 raise ValueError('請輸入程式指令（最多 16000 字元）')
             if not isinstance(name, str) or not name.strip() or len(name) > 100:
                 raise ValueError('請輸入工作名稱（最多 100 字元）')
-            if len(list(self.state.glob('*.json'))) >= 50:
+            if not updating and len(list(self.state.glob('*.json'))) >= 50:
                 raise ValueError('背景工作最多 50 個')
             cwd = self.path(request.get('cwd', '.'))
             if not cwd.is_dir():
                 raise ValueError('工作目錄不存在')
-            key = secrets.token_hex(12)
-            data = dict(id=key, name=name, command=command, cwd=self.relative(cwd),
+            data = dict(id=key, name=name, command=command, kind=kind, file=selected,
+                        arguments=arguments, cwd=self.relative(cwd),
                         autostart=request.get('autostart') is True)
             # 以腳本保存使用者指令，避免 systemd 將 % 或換行解讀為 unit 語法。
             import shlex
-            script = self.state / (key + '.sh')
-            script.write_text('#!/bin/bash\ncd -- ' + shlex.quote(str(cwd)) + '\n' + command + '\n')
+            script = self.state / (key + '-' + secrets.token_hex(4) + '.sh')
+            script.write_text('#!/bin/bash\ncd -- ' + shlex.quote(str(cwd)) + ' || exit 1\n' + command + '\n')
             script.chmod(0o700)
             units = self.root / '.config/systemd/user'
             units.mkdir(parents=True, exist_ok=True)
@@ -262,7 +288,10 @@ class Control:
             self.userctl('daemon-reload')
             if data['autostart']:
                 self.userctl('enable', 'pi-station-job-' + key)
-            self.userctl('start', 'pi-station-job-' + key)
+            else:
+                self.userctl('disable', 'pi-station-job-' + key)
+            if not updating:
+                self.userctl('start', 'pi-station-job-' + key)
             return dict(ok=True, id=key)
         key = self.job_id(request)
         if not (self.state / (key + '.json')).is_file():
@@ -277,30 +306,94 @@ class Control:
 
     def network(self, request):
         operation = request.get('op', 'list')
+        def field(key, name):
+            return self.run(['nmcli', '--escape', 'no', '-g', name,
+                             'connection', 'show', 'uuid', key])
         if operation == 'list':
-            return dict(current=self.run(['nmcli', '-f', 'GENERAL.CONNECTION,IP4.ADDRESS,IP4.GATEWAY',
+            profiles = []
+            rows = self.run(['nmcli', '-t', '-f', 'UUID,TYPE', 'connection', 'show'])
+            for row in rows.splitlines():
+                key, _, kind = row.partition(':')
+                if kind in ('wifi', '802-11-wireless'):
+                    profiles.append(dict(uuid=key, name=field(key, 'connection.id')))
+            return dict(profiles=profiles,
+                        current=self.run(['nmcli', '-f', 'GENERAL.CONNECTION,IP4.ADDRESS,IP4.GATEWAY',
                                           'device', 'show', 'wlan0']),
                         saved=self.run(['nmcli', '-f', 'NAME,UUID,TYPE,AUTOCONNECT,AUTOCONNECT-PRIORITY',
                                         'connection', 'show']),
                         nearby=self.run(['nmcli', '-f', 'IN-USE,SSID,SIGNAL,SECURITY', 'device', 'wifi',
                                          'list', 'ifname', 'wlan0', '--rescan', 'no']))
+        key = request.get('uuid', '')
+        if not isinstance(key, str) or not re.fullmatch(r'[a-f0-9-]{36}', key):
+            raise ValueError('無效網路 UUID')
+        hotspot = os.environ.get('PI_STATION_HOTSPOT_UUID')
+        if not hotspot:
+            raise ValueError('尚未設定手機熱點 UUID')
         if operation == 'priority':
-            key = request.get('uuid', '')
-            if not isinstance(key, str) or not re.fullmatch(r'[a-f0-9-]{36}', key):
-                raise ValueError('無效網路 UUID')
-            hotspot = os.environ.get('PI_STATION_HOTSPOT_UUID')
-            if not hotspot:
-                raise ValueError('尚未設定手機熱點 UUID，無法修改優先序')
             priority = int(request.get('priority', 0))
             if key == hotspot or not -999 <= priority <= 998:
                 raise ValueError('手機熱點維持最高 999；其他網路可設 -999 至 998')
-            kind = self.run(['nmcli', '-g', 'connection.type', 'connection', 'show', 'uuid', key])
-            if kind != '802-11-wireless':
-                raise ValueError('只允許修改 Wi-Fi 優先序')
-            self.run(['nmcli', 'connection', 'modify', 'uuid', key,
-                      'connection.autoconnect-priority', str(priority)])
-            return dict(ok=True)
-        raise ValueError('未知網路操作')
+        if field(key, 'connection.type') != '802-11-wireless':
+            raise ValueError('只允許編輯 Wi-Fi')
+        if operation == 'read':
+            security = field(key, '802-11-wireless-security.key-mgmt')
+            result = dict(uuid=key, name=field(key, 'connection.id'),
+                          ssid=field(key, '802-11-wireless.ssid'),
+                          autoconnect=field(key, 'connection.autoconnect') == 'yes',
+                          priority=int(field(key, 'connection.autoconnect-priority')),
+                          security=security or 'open', hotspot=key == hotspot)
+            if security in ('wpa-eap', 'wpa-eap-suite-b-192'):
+                result['identity'] = field(key, '802-1x.identity')
+            return result
+        if operation == 'priority':
+            changes = ['connection.autoconnect-priority', str(priority)]
+        elif operation == 'update':
+            name, ssid = request.get('name'), request.get('ssid')
+            if not isinstance(name, str) or not name.strip() or len(name) > 100 or any(c in name for c in '\n\r\0'):
+                raise ValueError('無效設定名稱')
+            if not isinstance(ssid, str) or not 1 <= len(ssid.encode()) <= 32 or any(c in ssid for c in '\n\r\0'):
+                raise ValueError('SSID 長度需為 1 至 32 bytes')
+            auto = request.get('autoconnect')
+            if not isinstance(auto, bool):
+                raise ValueError('無效自動連線設定')
+            priority = int(request.get('priority', 0))
+            if key == hotspot:
+                if priority != 999 or not auto or ssid != field(key, '802-11-wireless.ssid'):
+                    raise ValueError('手機熱點的 SSID、自動連線與最高優先序不可變更')
+            elif not -999 <= priority <= 998:
+                raise ValueError('優先序需為 -999 至 998')
+            changes = ['connection.id', name, '802-11-wireless.ssid', ssid,
+                       'connection.autoconnect', 'yes' if auto else 'no',
+                       'connection.autoconnect-priority', str(priority)]
+            password = request.get('password', '')
+            if not isinstance(password, str) or any(c in password for c in '\n\r\0'):
+                raise ValueError('無效 Wi-Fi 密碼')
+            security = field(key, '802-11-wireless-security.key-mgmt')
+            if security in ('wpa-eap', 'wpa-eap-suite-b-192'):
+                identity = request.get('identity', '')
+                if not isinstance(identity, str) or not identity or any(c in identity for c in '\n\r\0'):
+                    raise ValueError('請輸入企業網路帳號')
+                changes += ['802-1x.identity', identity]
+                if password:
+                    changes += ['802-1x.password', password]
+            elif password:
+                if security == 'wpa-psk':
+                    if not (8 <= len(password.encode()) <= 63 or re.fullmatch(r'[0-9A-Fa-f]{64}', password)):
+                        raise ValueError('WPA 密碼需為 8 至 63 bytes，或 64 位十六進位金鑰')
+                elif security == 'sae':
+                    if not 1 <= len(password.encode()) <= 63:
+                        raise ValueError('WPA3 密碼需為 1 至 63 bytes')
+                else:
+                    raise ValueError('這個網路不支援在此修改 Wi-Fi 密碼')
+                changes += ['802-11-wireless-security.psk', password]
+        else:
+            raise ValueError('未知網路操作')
+        # 錯誤訊息不可帶出包含密碼的 nmcli 參數。
+        try:
+            self.run(['nmcli', 'connection', 'modify', 'uuid', key, *changes])
+        except (ValueError, subprocess.SubprocessError):
+            raise ValueError('儲存失敗，請確認欄位與 NetworkManager 權限') from None
+        return dict(ok=True)
 
     def dispatch(self, action, request, owner):
         if action == 'system':

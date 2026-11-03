@@ -6,9 +6,9 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="description" content="樹莓派管理">
   <title>樹莓派管理</title>
-  <link rel="stylesheet" href="./style.css?v=1.1">
-  <script src="./app.js?v=1.1" defer></script>
-  <script src="./control.js?v=1.1" defer></script>
+  <link rel="stylesheet" href="./style.css?v=1.2">
+  <script src="./app.js?v=1.2" defer></script>
+  <script src="./control.js?v=1.2" defer></script>
 </head>
 <body>
   <div class="shell">
@@ -89,28 +89,43 @@
               </section>
               <section class="pane" data-pane="jobs" hidden>
                 <div class="pane-heading"><h3>背景執行</h3><button type="button" id="jobs-refresh" class="secondary">重新整理</button></div>
-                <form id="job-form">
+                <div id="job-list"></div><pre id="job-output" class="terminal-output" hidden></pre>
+                <h4 id="job-form-title">新增任務</h4><form id="job-form">
                   <label for="job-name">工作名稱</label><input id="job-name" required maxlength="100" placeholder="例如 Discord Bot">
-                  <label for="job-command">執行指令</label><textarea id="job-command" class="code-editor" rows="3" required placeholder="python3 bot.py" spellcheck="false"></textarea>
+                  <label for="job-kind">執行方式</label><select id="job-kind"><option value="command">指令</option><option value="file">程式檔案</option></select>
+                  <div id="job-command-fields"><label for="job-command">執行指令</label><textarea id="job-command" class="code-editor" rows="3" required placeholder="python3 bot.py" spellcheck="false"></textarea></div>
+                  <div id="job-file-fields" hidden><label for="job-file">程式檔案</label><div class="input-row"><input id="job-file" placeholder="程式路徑"><button type="button" id="job-file-pick" class="secondary">選擇檔案</button></div><label for="job-arguments">程式參數</label><input id="job-arguments" placeholder="選填" spellcheck="false"></div>
                   <label for="job-cwd">工作目錄（相對家目錄）</label><input id="job-cwd" value="." required>
                   <label class="check-label"><input type="checkbox" id="job-autostart">開機啟動</label>
-                  <button type="submit">建立並啟動</button>
+                  <div class="button-row"><button type="submit" id="job-save">建立並啟動</button><button type="button" id="job-cancel" class="secondary" hidden>取消編輯</button></div>
                 </form>
-                <p class="help">異常退出後自動重啟。</p>
-                <div id="job-list"></div><pre id="job-output" class="terminal-output" hidden></pre>
+                <p class="help" id="job-edit-help">異常退出後自動重啟。</p>
+                
               </section>
               <section class="pane" data-pane="network" hidden>
                 <div class="pane-heading"><h3>網路管理</h3><button type="button" id="network-refresh" class="secondary">重新整理</button></div>
                 <p class="network-policy">手機熱點優先序：999（固定）</p>
                 <h4>目前連線</h4><pre id="network-current" class="data-output"></pre>
-                <h4>已儲存網路</h4><pre id="network-saved" class="data-output"></pre>
-                <form id="priority-form"><label for="network-uuid">Wi-Fi UUID</label><input id="network-uuid" required placeholder="UUID"><label for="network-priority">優先序（-999 至 998）</label><input id="network-priority" type="number" min="-999" max="998" value="100" required><button type="submit">儲存優先序</button></form>
+                <h4>已儲存網路</h4><div id="network-profiles"></div><details><summary>連線資料</summary><pre id="network-saved" class="data-output"></pre></details>
+                <form id="network-form" hidden>
+                  <h4 id="network-edit-title">編輯 Wi-Fi</h4>
+                  <label for="network-name">設定名稱</label><input id="network-name" required maxlength="100">
+                  <label for="network-ssid">SSID</label><input id="network-ssid" required>
+                  <label for="network-security">安全類型</label><input id="network-security" readonly>
+                  <div id="network-identity-fields" hidden><label for="network-identity">企業網路帳號</label><input id="network-identity" autocomplete="off"></div>
+                  <div id="network-password-fields"><label for="network-password">新 Wi-Fi 密碼</label><input id="network-password" type="password" autocomplete="new-password" placeholder="留空保留原密碼"></div>
+                  <label for="network-priority">優先序</label><input id="network-priority" type="number" min="-999" max="998" required>
+                  <label class="check-label"><input type="checkbox" id="network-auto">自動連線</label>
+                  <p class="help" id="network-edit-help">儲存後於下次連線套用。</p>
+                  <div class="button-row"><button type="submit">儲存</button><button type="button" id="network-cancel" class="secondary">取消</button></div>
+                </form>
                 <h4>附近 Wi-Fi（最近掃描）</h4><pre id="network-nearby" class="data-output"></pre>
               </section>
             </div>
           </section>
         </div>
       </div>
+      <dialog id="file-picker" aria-labelledby="picker-title"><div class="pane-heading"><h3 id="picker-title">選擇程式檔案</h3><button type="button" id="picker-close" class="secondary">關閉</button></div><div class="file-toolbar"><button type="button" id="picker-up" class="secondary">上一層</button><code id="picker-path">~</code></div><p id="picker-message" class="help" role="status"></p><div id="picker-list" class="file-list"></div></dialog>
     </main>
   </div>
 </body>

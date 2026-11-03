@@ -22,7 +22,7 @@ records = []
 try:
     with urllib.request.urlopen(base + 'raspberry-pi/console-manifest.json', timeout=30) as r:
         manifest = json.load(r)
-    selected = ['index.html', 'style.css', 'app.js', 'control.js', 'raspberry-pi/device-server.py']
+    selected = ['index.html', 'style.css', 'app.js', 'control.js', 'raspberry-pi/device-server.py', 'raspberry-pi/control.py']
     downloads = []
     for source in selected:
         with urllib.request.urlopen(base + source, timeout=30) as r:

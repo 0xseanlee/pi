@@ -204,6 +204,41 @@
     const path = await save(); tab('terminal'); await openTerminal();
     await api('terminal', { op: 'input', id: terminal, data: `cd ~ && ${runner} ${quote(path)}\n` });
   });
+  let editingJob = '', pickerFolder = '.', editingNetwork = '';
+  function jobMode() {
+    const isFile = $('#job-kind').value === 'file';
+    $('#job-command-fields').hidden = isFile;
+    $('#job-file-fields').hidden = !isFile;
+    $('#job-command').required = !isFile;
+    $('#job-file').required = isFile;
+  }
+  $('#job-kind').addEventListener('change', jobMode);
+  function resetJob() {
+    editingJob = '';
+    $('#job-form').reset();
+    $('#job-form-title').textContent = '新增任務';
+    $('#job-save').textContent = '建立並啟動';
+    $('#job-cancel').hidden = true;
+    $('#job-edit-help').textContent = '異常退出後自動重啟。';
+    jobMode();
+  }
+  function editJob(job) {
+    editingJob = job.id;
+    $('#job-form-title').textContent = '編輯任務';
+    $('#job-name').value = job.name;
+    $('#job-kind').value = job.kind || 'command';
+    $('#job-command').value = job.command;
+    $('#job-file').value = job.file || '';
+    $('#job-arguments').value = job.arguments || '';
+    $('#job-cwd').value = job.cwd;
+    $('#job-autostart').checked = job.autostart;
+    $('#job-save').textContent = '儲存設定';
+    $('#job-cancel').hidden = false;
+    $('#job-edit-help').textContent = '儲存後按「重啟」套用；目前任務不會中斷。';
+    jobMode();
+    $('#job-form-title').scrollIntoView({ behavior: 'smooth' });
+  }
+  action('#job-cancel', resetJob);
   async function jobs() {
     const data = await api('jobs');
     $('#job-list').replaceChildren(...data.jobs.map((job) => {
@@ -211,8 +246,11 @@
       const heading = document.createElement('h4'); heading.textContent = job.name;
       const meta = document.createElement('p'); meta.className = 'help';
       meta.textContent = `${job.state} · ${job.autostart ? '開機啟動' : '手動啟動'} · ~/${job.cwd}`;
-      const command = document.createElement('pre'); command.className = 'data-output'; command.textContent = job.command;
+      const command = document.createElement('pre'); command.className = 'data-output';
+      command.textContent = job.kind === 'file' ? `${job.file}${job.arguments ? ' ' + job.arguments : ''}` : job.command;
       const buttons = document.createElement('div'); buttons.className = 'button-row';
+      const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'secondary'; edit.textContent = '編輯';
+      edit.addEventListener('click', () => editJob(job)); buttons.append(edit);
       for (const [op, label] of [['start', '啟動'], ['stop', '停止'], ['restart', '重啟'], ['logs', '日誌']]) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = label;
         button.addEventListener('click', async () => {
@@ -231,17 +269,91 @@
   }
   action('#jobs-refresh', jobs);
   form('#job-form', async () => {
-    await api('jobs', { op: 'create', name: $('#job-name').value, command: $('#job-command').value,
+    const updating = !!editingJob;
+    await api('jobs', { op: updating ? 'update' : 'create', id: editingJob,
+      kind: $('#job-kind').value, name: $('#job-name').value, command: $('#job-command').value,
+      file: $('#job-file').value.trim(), arguments: $('#job-arguments').value,
       cwd: $('#job-cwd').value, autostart: $('#job-autostart').checked });
-    await jobs(); message('背景任務已建立並啟動。');
+    resetJob(); await jobs();
+    message(updating ? '設定已儲存，重啟後套用。' : '任務已建立。');
+  });
+  async function picker() {
+    const data = await api('files', { path: pickerFolder });
+    pickerFolder = data.path;
+    $('#picker-path').textContent = pickerFolder === '.' ? '~' : '~/' + pickerFolder;
+    $('#picker-list').replaceChildren(...data.entries.filter((item) => item.directory || /\.(py|sh|js)$/i.test(item.name)).map((item) => {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'file-name';
+      button.textContent = (item.directory ? '▸ ' : '') + item.name;
+      button.addEventListener('click', async () => {
+        try {
+          if (item.directory) { pickerFolder = item.path; await picker(); }
+          else {
+            $('#job-file').value = item.path;
+            $('#job-cwd').value = item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : '.';
+            $('#file-picker').close();
+          }
+        } catch (e) { $('#picker-message').textContent = e.message; }
+      });
+      const row = document.createElement('div'); row.className = 'file-row'; row.append(button); return row;
+    }));
+    $('#picker-message').textContent = $('#picker-list').childElementCount ? '' : '沒有可選的程式檔案。';
+  }
+  action('#job-file-pick', async () => {
+    pickerFolder = folder; $('#file-picker').showModal();
+    try { await picker(); } catch (e) { $('#picker-message').textContent = e.message; }
+  });
+  action('#picker-close', () => $('#file-picker').close());
+  action('#picker-up', async () => {
+    pickerFolder = pickerFolder.includes('/') ? pickerFolder.slice(0, pickerFolder.lastIndexOf('/')) : '.';
+    await picker();
   });
   async function network() {
     const data = await api('network');
     for (const key of ['current', 'saved', 'nearby']) $(`#network-${key}`).textContent = data[key];
+    $('#network-profiles').replaceChildren(...data.profiles.map((profile) => {
+      const row = document.createElement('div'); row.className = 'profile-row';
+      const name = document.createElement('span'); name.textContent = profile.name;
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'secondary'; button.textContent = '編輯';
+      button.addEventListener('click', async () => {
+        button.disabled = true;
+        try { await editNetwork(profile.uuid); } catch (e) { message(e.message, true); }
+        finally { button.disabled = false; }
+      });
+      row.append(name, button); return row;
+    }));
+  }
+  async function editNetwork(uuid) {
+    const data = await api('network', { op: 'read', uuid });
+    editingNetwork = uuid;
+    $('#network-edit-title').textContent = '編輯 ' + data.name;
+    $('#network-name').value = data.name;
+    $('#network-ssid').value = data.ssid;
+    $('#network-ssid').readOnly = data.hotspot;
+    $('#network-security').value = data.security;
+    $('#network-priority').value = data.priority;
+    $('#network-priority').max = data.hotspot ? '999' : '998';
+    $('#network-priority').readOnly = data.hotspot;
+    $('#network-auto').checked = data.autoconnect;
+    $('#network-auto').disabled = data.hotspot;
+    const enterprise = ['wpa-eap', 'wpa-eap-suite-b-192'].includes(data.security);
+    $('#network-identity-fields').hidden = !enterprise;
+    $('#network-identity').value = data.identity || '';
+    $('#network-password-fields').hidden = !['wpa-psk', 'sae', 'wpa-eap', 'wpa-eap-suite-b-192'].includes(data.security);
+    $('#network-password').value = '';
+    $('#network-edit-help').textContent = data.hotspot ? '手機熱點的 SSID、自動連線與優先序固定。密碼修改於下次連線套用。' : '密碼留空保留原值，修改於下次連線套用。';
+    $('#network-form').hidden = false;
+    $('#network-form').scrollIntoView({ behavior: 'smooth' });
   }
   action('#network-refresh', network);
-  form('#priority-form', async () => {
-    await api('network', { op: 'priority', uuid: $('#network-uuid').value.trim(), priority: Number($('#network-priority').value) });
-    await network(); message('優先序已更新；目前連線不會被強制切換。');
+  action('#network-cancel', () => { editingNetwork = ''; $('#network-password').value = ''; $('#network-form').hidden = true; });
+  form('#network-form', async () => {
+    try {
+      await api('network', { op: 'update', uuid: editingNetwork, name: $('#network-name').value,
+        ssid: $('#network-ssid').value, priority: Number($('#network-priority').value),
+        autoconnect: $('#network-auto').checked, identity: $('#network-identity').value,
+        password: $('#network-password').value });
+      $('#network-form').hidden = true; editingNetwork = ''; await network();
+      message('網路設定已儲存，下次連線套用。');
+    } finally { $('#network-password').value = ''; }
   });
 })();

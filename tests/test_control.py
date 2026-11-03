@@ -64,6 +64,57 @@ class Controls(unittest.TestCase):
             result = self.control.jobs(dict(op='create', name='test', command='echo %h\necho second', cwd='.'))
         unit = (self.root / '.config/systemd/user' / ('pi-station-job-' + result['id'] + '.service')).read_text()
         self.assertNotIn('echo', unit)
-        self.assertIn('echo %h\necho second', (self.control.state / (result['id'] + '.sh')).read_text())
+        script = next(self.control.state.glob(result['id'] + '-*.sh'))
+        self.assertIn('echo %h\necho second', script.read_text())
         with self.assertRaises(ValueError):
             self.control.jobs(dict(op='stop', id='../../sshd'))
+
+    def test_file_job_quotes_arguments_and_update_does_not_restart(self):
+        import json
+        import shlex
+        program = self.root / 'my program.py'
+        program.write_text('print(1)')
+        with patch.object(self.control, 'userctl', return_value='') as systemd:
+            result = self.control.jobs(dict(op='create', kind='file', name='python',
+                file=program.name, arguments='"hello world" ";touch bad"', cwd='.', autostart=True))
+            key = result['id']
+            saved = json.loads((self.control.state / (key + '.json')).read_text())
+            self.assertEqual(shlex.split(saved['command']), ['python3', '-u', str(program), 'hello world', ';touch bad'])
+            systemd.reset_mock()
+            self.control.jobs(dict(op='update', id=key, name='updated', kind='command', command='echo new', cwd='.', autostart=False))
+            calls = [call.args[0] for call in systemd.call_args_list]
+            self.assertIn('disable', calls)
+            self.assertNotIn('start', calls)
+            self.assertNotIn('restart', calls)
+            self.assertEqual(len(list(self.control.state.glob('*.json'))), 1)
+
+    def test_network_edit_preserves_password_and_never_activates_connection(self):
+        key = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        def nm(args, **kwargs):
+            if 'modify' in args:
+                return ''
+            return {'connection.type': '802-11-wireless',
+                    '802-11-wireless-security.key-mgmt': 'wpa-psk'}[args[4]]
+        with patch.dict(os.environ, PI_STATION_HOTSPOT_UUID='bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'):
+            with patch.object(self.control, 'run', side_effect=nm) as run:
+                self.control.network(dict(op='update', uuid=key, name='Home', ssid='Home Wi-Fi',
+                    autoconnect=True, priority=100, password=''))
+                changes = run.call_args_list[-1].args[0]
+                self.assertIn('modify', changes)
+                self.assertNotIn('802-11-wireless-security.psk', changes)
+                self.assertFalse(any('up' in call.args[0] for call in run.call_args_list))
+            with patch.object(self.control, 'run', side_effect=nm) as run:
+                with self.assertRaises(ValueError):
+                    self.control.network(dict(op='update', uuid=key, name='Home', ssid='Home',
+                        autoconnect=True, priority=100, password='short'))
+                self.assertFalse(any('modify' in call.args[0] for call in run.call_args_list))
+
+    def test_hotspot_edit_cannot_disable_auto_or_change_ssid(self):
+        key = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        def nm(args, **kwargs):
+            return {'connection.type': '802-11-wireless', '802-11-wireless.ssid': 'phone'}[args[4]]
+        with patch.dict(os.environ, PI_STATION_HOTSPOT_UUID=key), patch.object(self.control, 'run', side_effect=nm):
+            for ssid, auto in [('other', True), ('phone', False)]:
+                with self.assertRaises(ValueError):
+                    self.control.network(dict(op='update', uuid=key, name='phone', ssid=ssid,
+                        autoconnect=auto, priority=999, password=''))
