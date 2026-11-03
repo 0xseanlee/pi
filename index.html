@@ -7,18 +7,19 @@
   <meta name="description" content="你的樹莓派控制台，為同一個熱點下的裝置準備。">
   <title>Pi Station · 樹莓派控制台</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23101416'/%3E%3Ctext x='6' y='24' font-size='25' font-family='serif' fill='%23c7f36a'%3Eπ%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="./style.css?v=0.3">
-  <script src="./app.js?v=0.3" defer></script>
+  <link rel="stylesheet" href="./style.css?v=1.0">
+  <script src="./app.js?v=1.0" defer></script>
+  <script src="./control.js?v=1.0" defer></script>
 </head>
 <body>
   <div class="shell">
     <header class="topbar">
       <a class="brand" href="./" aria-label="Pi Station 首頁"><span class="brand-icon">π</span> Pi Station<span class="brand-divider">/</span><span class="brand-caption">個人控制台</span></a>
-      <span class="version">PI STATION / V0.3</span>
+      <span class="version">PI STATION / V1.0</span>
     </header>
     <main>
       <div class="heading-row">
-        <div><p class="eyebrow">YOUR DEVICE, YOUR CONTROL</p><h1>樹莓派工作站<span class="accent">.</span></h1><p class="intro">連上你的熱點，從這裡開始。</p></div>
+        <div><p class="eyebrow">YOUR DEVICE, YOUR CONTROL</p><h1>樹莓派工作站<span class="accent">.</span></h1><p class="intro">檔案、程式與終端機，隨手掌握。</p></div>
         <span class="status" id="connection-status" role="status"><span class="status-dot"></span><span id="status-text">準備搜尋</span></span>
       </div>
       <div class="workspace">
@@ -33,13 +34,13 @@
         <div class="right-column">
           <section class="connection-card" aria-labelledby="connection-title">
             <div class="card-top"><span class="eyebrow">02 / CONNECTION</span><span class="small-label">自動搜尋</span></div>
-            <h2 id="connection-title">打開，就開始找。</h2><p class="section-copy">不用輸入 IP。樹莓派連上你的熱點後，這裡會自動尋找它。</p>
+            <h2 id="connection-title">打開，就開始找。</h2><p class="section-copy">從 GitHub 入口連到樹莓派，登入後開啟工作台。</p>
             <div class="discovery-state" aria-live="polite"><p id="discovery-message">正在準備搜尋…</p><p id="discovery-detail" class="help"></p></div>
             <div class="discovery-actions"><button type="button" id="scan-button">重新搜尋</button><a id="local-link" class="local-link" href="https://sean.local:8443/">開啟樹莓派控制台</a></div>
             <button id="stay-button" type="button" class="text-button" hidden>留在此頁</button>
             <section id="login-panel" class="login-panel" aria-labelledby="login-title" hidden>
               <h3 id="login-title">登入你的樹莓派</h3>
-              <p class="help" id="login-help">密碼由樹莓派驗證，只透過 HTTPS 傳送。</p>
+              <p class="help" id="login-help">密碼透過 HTTPS 傳送至樹莓派，再由該台的 SSH 服務驗證。</p>
               <form id="login-form">
                 <label for="username">帳號</label>
                 <input id="username" name="username" value="sean" autocomplete="username" readonly>
@@ -60,9 +61,64 @@
             </details>
           </section>
           <section class="controls-card" aria-labelledby="controls-title">
-            <div class="card-top"><span class="eyebrow">03 / CONTROLS</span><span class="small-label">等你定義</span></div>
-            <h2 id="controls-title">你的控制區</h2>
-            <div class="empty-controls"><span class="plus-mark" aria-hidden="true">+</span><h3 id="controls-message">登入後，開始你的操作。</h3><p>告訴我要控制什麼，<br>我們就把它放在這裡。</p><span class="pending-tag" id="controls-state">請先登入 · 功能等待設定</span></div>
+            <div class="card-top"><span class="eyebrow">WORKSPACE</span><span class="small-label" id="controls-state">請先登入</span></div>
+            <h2 id="controls-title">管理工作台</h2>
+            <p id="controls-message" class="help">使用樹莓派帳密登入後開始操作。</p>
+            <p id="action-message" role="status" aria-live="polite"></p>
+            <div id="workbench" hidden>
+              <nav class="tabs" aria-label="工作台分頁">
+                <button type="button" data-tab="overview" aria-selected="true">總覽</button>
+                <button type="button" data-tab="files">檔案</button>
+                <button type="button" data-tab="terminal">Terminal</button>
+                <button type="button" data-tab="jobs">背景任務</button>
+                <button type="button" data-tab="network">網路</button>
+              </nav>
+              <section class="pane" data-pane="overview">
+                <div class="pane-heading"><h3>裝置狀態</h3><button type="button" id="refresh-overview" class="secondary">重新整理</button></div>
+                <div id="metrics" class="metrics"></div>
+                <div class="workspace-note"><h3>開始工作</h3><p>在「檔案」上傳或編輯程式，再用 Terminal 執行。需要持續運作的程式，交給「背景任務」。</p><p>檔案管理範圍是 sean 家目錄；Terminal 以 sean 身分執行。手機熱點維持最高優先。</p></div>
+              </section>
+              <section class="pane" data-pane="files" hidden>
+                <div class="pane-heading"><h3>檔案管理</h3><button type="button" id="files-refresh" class="secondary">重新整理</button></div>
+                <div class="file-toolbar"><button type="button" id="files-up" class="secondary">上一層</button><code id="current-path">~</code></div>
+                <div class="button-row"><button type="button" id="file-new">新增檔案</button><button type="button" id="folder-new" class="secondary">新增資料夾</button><label class="upload-label" for="file-upload">上傳檔案</label><input type="file" id="file-upload" hidden></div>
+                <p class="help">單檔上限 8 MiB。上傳不覆蓋同名檔；編輯後可儲存既有檔案。</p>
+                <div id="file-list" class="file-list"></div>
+                <div id="editor-panel" hidden>
+                  <label for="editor-path">檔案路徑（相對家目錄）</label><input id="editor-path" spellcheck="false">
+                  <label for="editor">程式編輯器</label><textarea id="editor" class="code-editor" rows="18" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+                  <div class="button-row"><button type="button" id="file-save">儲存</button><button type="button" id="file-run" class="secondary">儲存並執行</button><button type="button" id="editor-close" class="secondary">關閉編輯器</button></div>
+                  <p class="help">可直接執行 .py、.sh、.js；C/C++ 請於 Terminal 編譯。</p>
+                </div>
+              </section>
+              <section class="pane" data-pane="terminal" hidden>
+                <div class="pane-heading"><h3>互動 Shell</h3><button type="button" id="terminal-open">開啟終端機</button></div>
+                <p class="help">支援指令、互動輸入與 Ctrl+C。此版本為文字終端機；vim、top 等全螢幕介面請使用 SSH。閒置 15 分鐘自動關閉。</p>
+                <pre id="terminal-output" class="terminal-output" tabindex="0" aria-label="終端機輸出"></pre>
+                <form id="terminal-form" class="terminal-form"><label class="sr-only" for="terminal-input">輸入指令</label><input id="terminal-input" placeholder="輸入指令或程式要求的文字" spellcheck="false" autocomplete="off" autocapitalize="off"><button type="submit">送出</button></form>
+                <div class="button-row"><button type="button" id="terminal-interrupt" class="secondary">Ctrl+C</button><button type="button" id="terminal-close" class="secondary">關閉連線</button></div>
+              </section>
+              <section class="pane" data-pane="jobs" hidden>
+                <div class="pane-heading"><h3>背景執行</h3><button type="button" id="jobs-refresh" class="secondary">重新整理</button></div>
+                <form id="job-form">
+                  <label for="job-name">工作名稱</label><input id="job-name" required maxlength="100" placeholder="例如 Discord Bot">
+                  <label for="job-command">執行指令</label><textarea id="job-command" class="code-editor" rows="3" required placeholder="python3 bot.py" spellcheck="false"></textarea>
+                  <label for="job-cwd">工作目錄（相對家目錄）</label><input id="job-cwd" value="." required>
+                  <label class="check-label"><input type="checkbox" id="job-autostart">樹莓派開機時自動執行</label>
+                  <button type="submit">建立並啟動</button>
+                </form>
+                <p class="help">關閉網站後仍持續執行。異常退出會在 5 秒後重啟。</p>
+                <div id="job-list"></div><pre id="job-output" class="terminal-output" hidden></pre>
+              </section>
+              <section class="pane" data-pane="network" hidden>
+                <div class="pane-heading"><h3>網路管理</h3><button type="button" id="network-refresh" class="secondary">重新整理</button></div>
+                <div class="network-policy"><b>手機熱點永遠優先 · 999</b><p>熱點消失才使用其他網路；熱點重新出現時，既有服務會主動切回。</p></div>
+                <h4>目前連線</h4><pre id="network-current" class="data-output"></pre>
+                <h4>已儲存網路</h4><pre id="network-saved" class="data-output"></pre>
+                <form id="priority-form"><label for="network-uuid">要調整的 Wi-Fi UUID</label><input id="network-uuid" required placeholder="從上方複製 UUID"><label for="network-priority">優先序（-999 至 998）</label><input id="network-priority" type="number" min="-999" max="998" value="100" required><button type="submit">儲存優先序</button></form>
+                <h4>附近 Wi-Fi（最近掃描）</h4><pre id="network-nearby" class="data-output"></pre>
+              </section>
+            </div>
           </section>
         </div>
       </div>
@@ -72,3 +128,4 @@
   </div>
 </body>
 </html>
+

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local TLS dashboard, PAM-backed login and server-side sessions."""
+"""Local TLS dashboard, SSH-backed login and server-side sessions."""
 import argparse
 from collections import defaultdict, deque
 from http.cookies import SimpleCookie, CookieError
@@ -13,12 +13,16 @@ import ssl
 import threading
 import time
 from urllib.parse import urlsplit
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from control import Control
 
 ALLOWED_ORIGINS = {'https://0xseanlee.me', 'https://0xseanlee.github.io',
                    'http://localhost:8080', 'http://127.0.0.1:8080'}
 ASSETS = {'/': ('index.html', 'text/html; charset=utf-8'),
           '/index.html': ('index.html', 'text/html; charset=utf-8'),
           '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+          '/control.js': ('control.js', 'text/javascript; charset=utf-8'),
           '/style.css': ('style.css', 'text/css; charset=utf-8')}
 COOKIE = '__Host-pi-session'
 IDLE_SECONDS = 1800
@@ -125,6 +129,15 @@ class Handler(BaseHTTPRequestHandler):
             self.connection.close()
 
     def reply(self, status, data=None, content_type='application/json', head=False, headers=None):
+        # 拒絕小型 POST 時仍消耗已宣告的內容，避免 TLS 關閉時遺失錯誤回應。
+        if self.command == 'POST' and not getattr(self, 'body_read', False):
+            try:
+                remaining = int(self.headers.get('Content-Length', '0'))
+                if 0 < remaining <= 4096:
+                    self.rfile.read(remaining)
+            except (ValueError, OSError):
+                pass
+            self.body_read = True
         body = data if isinstance(data, bytes) else json.dumps(data or {}).encode()
         self.send_response(status)
         self.send_header('Content-Type', content_type)
@@ -212,7 +225,7 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(401, {'error': 'login_required'}, head=head)
         elif path == '/api/v1/identity':
             self.reply(200, {'service': 'pi-station', 'api_version': 1, 'hostname': socket.gethostname(),
-                             'capabilities': ['discovery', 'login']}, head=head)
+                             'capabilities': ['discovery', 'login', 'files', 'terminal', 'jobs', 'network']}, head=head)
         else:
             self.reply(404, {'error': 'not_found'}, head=head)
 
@@ -231,8 +244,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             size = int(self.headers.get('Content-Length', '-1'))
-            if not 0 <= size <= 4096:
+            if not 0 <= size <= 12 * 1024 * 1024:
                 raise ValueError()
+            self.body_read = True
             request = json.loads(self.rfile.read(size))
             if not isinstance(request, dict):
                 raise ValueError()
@@ -241,6 +255,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = urlsplit(self.path).path
         if path == '/api/v1/login':
+            if size > 4096:
+                self.reply(400, {'error': 'invalid_request'})
+                return
             username, password = request.get('username'), request.get('password')
             if not isinstance(username, str) or not isinstance(password, str) or not 0 < len(password.encode()) <= 1024 or '\0' in password:
                 self.reply(400, {'error': 'invalid_request'})
@@ -253,14 +270,23 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, {'authenticated': True, 'username': 'sean', 'csrf': csrf}, headers={
                 'Set-Cookie': f'{COOKIE}={token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age={MAX_SECONDS}'})
             return
-        session = self.server.auth.session(self.token())
+        session = self.server.auth.session(self.token(), touch=True)
         if not session:
             self.reply(401, {'error': 'login_required'})
         elif not secrets.compare_digest(self.headers.get('X-CSRF-Token', ''), session['csrf']):
             self.reply(403, {'error': 'csrf_required'})
         elif path == '/api/v1/logout':
+            self.server.control.logout(self.token())
             self.server.auth.logout(self.token())
             self.reply(200, {'authenticated': False}, headers={'Set-Cookie': f'{COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0'})
+        elif path.startswith('/api/v1/control/'):
+            try:
+                result = self.server.control.dispatch(path.rsplit('/', 1)[-1], request, self.token())
+                self.reply(200, result)
+            except (ValueError, OSError, KeyError, TypeError, UnicodeError) as error:
+                self.reply(400, {'error': str(error)[:2000]})
+            except Exception:
+                self.reply(500, {'error': '操作失敗，請查看服務日誌'})
         else:
             self.reply(404, {'error': 'not_found'})
 
@@ -294,6 +320,7 @@ class Server(ThreadingHTTPServer):
 def make_server(host, port, web_root, auth, secure, tls_port):
     server = Server((host, port), Handler)
     server.web_root, server.auth, server.secure, server.tls_port = web_root.resolve(), auth, secure, tls_port
+    server.control = Control()
     return server
 
 
@@ -318,3 +345,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

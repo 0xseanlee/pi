@@ -16,3 +16,4 @@ PrivateTmp=yes
 ProtectHome=yes
 ProtectSystem=strict
 ReadWritePaths=/run/pi-station-wifi
+

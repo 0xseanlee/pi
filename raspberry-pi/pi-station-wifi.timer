@@ -9,3 +9,4 @@ Unit=pi-station-wifi.service
 
 [Install]
 WantedBy=timers.target
+

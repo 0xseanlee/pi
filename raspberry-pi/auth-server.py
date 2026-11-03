@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""Root-only PAM broker. Accepts requests only from the local sean UID."""
-import ctypes as C
-import ctypes.util
+"""Local SSH authentication broker; accepts only the local sean UID."""
 import json
 import os
 from pathlib import Path
@@ -11,72 +9,26 @@ import struct
 
 SOCKET = '/run/pi-station-auth/auth.sock'
 
-class Message(C.Structure):
-    _fields_ = [('style', C.c_int), ('message', C.c_char_p)]
-
-class Response(C.Structure):
-    _fields_ = [('response', C.c_void_p), ('code', C.c_int)]
-
-CALLBACK = C.CFUNCTYPE(C.c_int, C.c_int, C.POINTER(C.POINTER(Message)),
-                       C.POINTER(C.POINTER(Response)), C.c_void_p)
-
-class Conversation(C.Structure):
-    _fields_ = [('callback', CALLBACK), ('data', C.c_void_p)]
-
-
 def authenticate(password):
-    pam = C.CDLL(ctypes.util.find_library('pam'))
-    libc = C.CDLL(ctypes.util.find_library('c'))
-    libc.calloc.argtypes = [C.c_size_t, C.c_size_t]
-    libc.calloc.restype = C.c_void_p
-    libc.strdup.argtypes = [C.c_char_p]
-    libc.strdup.restype = C.c_void_p
-    libc.free.argtypes = [C.c_void_p]
-    pam.pam_start.argtypes = [C.c_char_p, C.c_char_p, C.POINTER(Conversation), C.POINTER(C.c_void_p)]
-    pam.pam_authenticate.argtypes = [C.c_void_p, C.c_int]
-    pam.pam_acct_mgmt.argtypes = [C.c_void_p, C.c_int]
-    pam.pam_end.argtypes = [C.c_void_p, C.c_int]
-
-    @CALLBACK
-    def converse(count, messages, output, _):
-        if not 1 <= count <= 32:
-            return 19
-        raw = libc.calloc(count, C.sizeof(Response))
-        if not raw:
-            return 19
-        replies = C.cast(raw, C.POINTER(Response))
-        for i in range(count):
-            style = messages[i].contents.style
-            if style in (1, 2):
-                value = password.encode() if style == 1 else b'sean'
-                replies[i].response = libc.strdup(value)
-                if not replies[i].response:
-                    for j in range(i):
-                        if replies[j].response:
-                            libc.free(replies[j].response)
-                    libc.free(raw)
-                    return 19
-            elif style not in (3, 4):
-                for j in range(i):
-                    if replies[j].response:
-                        libc.free(replies[j].response)
-                libc.free(raw)
-                return 19
-        output[0] = replies
-        return 0
-
-    handle = C.c_void_p()
-    conversation = Conversation(converse, None)
-    code = pam.pam_start(b'pi-station', b'sean', C.byref(conversation), C.byref(handle))
-    if code:
+    """Authenticate through loopback SSH, pinned to this Pi's public host key."""
+    import base64
+    import paramiko
+    fields = Path('/etc/ssh/ssh_host_ed25519_key.pub').read_text().split()
+    if fields[0] != 'ssh-ed25519':
         return False
+    key = paramiko.Ed25519Key(data=base64.b64decode(fields[1]))
+    client = paramiko.SSHClient()
+    client.get_host_keys().add('127.0.0.1', 'ssh-ed25519', key)
+    client.set_missing_host_key_policy(paramiko.RejectPolicy())
     try:
-        code = pam.pam_authenticate(handle, 0)
-        if code == 0:
-            code = pam.pam_acct_mgmt(handle, 0)
-        return code == 0
+        client.connect('127.0.0.1', port=22, username='sean', password=password,
+                       allow_agent=False, look_for_keys=False, timeout=6,
+                       auth_timeout=6, banner_timeout=6)
+        return client.get_transport().is_authenticated()
+    except (paramiko.SSHException, OSError):
+        return False
     finally:
-        pam.pam_end(handle, code)
+        client.close()
 
 
 def main():
@@ -110,3 +62,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

@@ -91,6 +91,7 @@
 
   function locked(text = '') {
     csrf = '';
+    window.dispatchEvent(new CustomEvent('pi-session', { detail: null }));
     $('#controls-message').textContent = '登入後，開始你的操作。';
     $('#controls-state').textContent = '請先登入 · 功能等待設定';
     $('#login-panel').hidden = !isLocalTLS;
@@ -105,15 +106,16 @@
 
   function authenticated(data) {
     csrf = data.csrf;
-    $('#controls-message').textContent = '下一個功能，由你決定。';
-    $('#controls-state').textContent = '功能等待設定';
+    window.dispatchEvent(new CustomEvent('pi-session', { detail: data }));
+    $('#controls-message').textContent = '你的樹莓派，隨時開工。';
+    $('#controls-state').textContent = '已連線 · 可操作';
     $('#login-panel').hidden = true;
     $('#account-panel').hidden = false;
     $('#device-note').textContent = '登入成功';
     $('#service-status').textContent = '已驗證 sean';
     setState('connected', '已登入 sean');
     discovery.textContent = '歡迎回來，sean。';
-    detail.textContent = '登入有效期間最多 30 分鐘；離開共用裝置前請登出。控制功能等待你設定。';
+    detail.textContent = '閒置 30 分鐘或登入滿 8 小時後需重新登入；離開共用裝置前請登出。';
     $('#login-message').textContent = '';
   }
 
@@ -291,3 +293,4 @@
   });
   scan();
 })();
+

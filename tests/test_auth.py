@@ -124,5 +124,14 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(code, 429)
         self.assertEqual(headers['Retry-After'], '60')
 
+    def test_controls_require_login_csrf_and_reject_path_escape(self):
+        self.assertEqual(self.request('/api/v1/control/files', 'POST', {})[0], 401)
+        cookie, csrf, _ = self.login()
+        self.assertEqual(self.request('/api/v1/control/files', 'POST', {}, headers={'Cookie': cookie})[0], 403)
+        headers = {'Cookie': cookie, 'X-CSRF-Token': csrf}
+        self.assertEqual(self.request('/api/v1/control/files', 'POST', {'path': '../escape'}, headers=headers)[0], 400)
+        self.assertEqual(self.request('/api/v1/control/files', 'POST', {'path': '.'}, headers=headers)[0], 200)
+
 if __name__ == '__main__':
     unittest.main()
+

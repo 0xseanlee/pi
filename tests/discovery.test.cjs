@@ -22,11 +22,12 @@ function browser({ ios = false, url = 'https://sean.local:8443/', response = () 
   location.assign = (value) => navigation.push(value);
   const context = {
     URL, Request, AbortController, Set, Promise,
+    CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
     location,
     navigator: { userAgent: ios ? 'iPhone Safari' : 'Chrome', platform: '', maxTouchPoints: 0 },
     localStorage: { getItem() { return null; }, setItem(key, value) { saved.push({ key, value }); } },
     document: { hidden: false, querySelector: element, addEventListener: (n, fn) => events.set(n, fn) },
-    window: { addEventListener: (n, fn) => events.set(n, fn) },
+    window: { addEventListener: (n, fn) => events.set(n, fn), dispatchEvent: (e) => { events.get(e.type)?.(e); } },
     setTimeout(fn, delay) { const id = ++timerId; timers.set(id, { fn, delay }); return id; },
     clearTimeout(id) { timers.delete(id); },
     async fetch(address, options) {
@@ -133,5 +134,6 @@ test('login submits only to the local TLS API, clears the input and keeps secret
   assert(!JSON.stringify(b.saved).includes('test-only-password'));
   assert.equal(b.element('#login-panel').hidden, true);
   assert.equal(b.element('#status-text').textContent, '已登入 sean');
-  assert.equal(b.element('#controls-state').textContent, '功能等待設定');
+  assert.equal(b.element('#controls-state').textContent, '已連線 · 可操作');
 });
+
