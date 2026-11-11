@@ -8,6 +8,7 @@ from discord import app_commands
 
 from .config import ConfigError
 from .archive import Job
+from .control import serve
 from .engine import EngineError, transform
 from .updater import lock
 
@@ -33,6 +34,7 @@ class OBFClient(discord.Client):
         self.tree = app_commands.CommandTree(self)
         self.busy = False
         self.outcome = 0
+        self.job_task = None
         self.tree.add_command(app_commands.Command(
             name='obf', description='上傳 .lua 檔進行 VM 混淆；本次工作結束後 bot 下線。', callback=self.obfuscate,
         ))
@@ -64,6 +66,14 @@ class OBFClient(discord.Client):
         state = '已設定外部引擎，執行結果仍需驗證' if self.configuration.get('engine_argv') else 'VM 混淆引擎尚未接上'
         await interaction.response.send_message('按需單次模式。' + state, ephemeral=True)
 
+    async def stop(self):
+        if self.job_task is not None and self.job_task is not asyncio.current_task() and not self.job_task.done():
+            self.job_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self.job_task
+        self.outcome = 130
+        await self.close()
+
     def job_channels(self, interaction):
         server = self.configuration.get('server')
         if not server:
@@ -94,6 +104,7 @@ class OBFClient(discord.Client):
             await interaction.response.send_message('混淆引擎目前接受不超過 2 MiB 的 .lua 原始檔。', ephemeral=True)
             return
         self.busy = True
+        self.job_task = asyncio.current_task()
         started = time.monotonic()
         state = {'stage': '接收檔案'}
         ticker = None
@@ -126,13 +137,13 @@ class OBFClient(discord.Client):
                 with contextlib.suppress(asyncio.CancelledError, Exception):
                     await ticker
 
-        async def fail(detail, status='failed'):
+        async def fail(detail, status='failed', stage='失敗'):
             self.outcome = 1
             await stop_ticker()
             if job:
                 job.record(status=status, error=detail)
                 detail += f' 工作 {job.id} 中已保存的檔案與紀錄保留在 Pi。'
-            failed = embed('失敗', detail=detail, outcome=False)
+            failed = embed(stage, detail=detail, outcome=False)
             # A channel/network failure must not mask the saved job or prevent exit.
             with contextlib.suppress(discord.HTTPException):
                 await edit_progress(failed)
@@ -201,6 +212,8 @@ class OBFClient(discord.Client):
         except asyncio.CancelledError:
             if job:
                 job.record(status='cancelled')
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(fail('工作已取消，Bot 即將下線。', status='cancelled', stage='已取消'), timeout=3)
             raise
         except EngineError as error:
             await fail(str(error))
@@ -208,13 +221,14 @@ class OBFClient(discord.Client):
             await fail('本次處理或 Discord 傳送未完成；bot 即將下線。')
         finally:
             await stop_ticker()
+            self.job_task = None
             await self.close()
 
 
 def run(configuration):
     async def session():
         async with OBFClient(configuration) as client:
-            await client.start(configuration['token'])
+            await serve(client, configuration['token'])
             return client.outcome
     logging.getLogger('discord').setLevel(logging.WARNING)
     try:

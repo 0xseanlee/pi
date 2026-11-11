@@ -78,3 +78,15 @@ the user sends a new instruction; do not imply overnight changes will appear.
   caps input 2 MiB/output 8 MiB, distinct from platform upload limits.
 - New template/archive features are tested locally on Mac, no real Discord token,
   no live template or Pi deployment tested while user is away. User must update.
+
+- User requested `dc obf --close` (also phone `—close`). New bot runs expose
+  a private local Unix socket while holding obf.run.lock. Stop cancels an active
+  job, kills its engine process group, keeps saved files/cancelled job metadata,
+  then disconnects Discord; close waits for run lock release before confirming.
+  No PID-based killing, no daemon, no token load required for close. Offline close
+  is harmless; update/template locks are not stopped. Old running versions need
+  Ctrl+C before updating; they cannot gain a control socket retroactively.
+- Close validated on Mac using a separate bot process with mocked Discord I/O
+  and a real sleeping subprocess worker. Worker exit, cancelled archive status,
+  preserved input and socket cleanup all passed. 32 tests pass, 1 pinned backend
+  fixture skipped. No live Discord/Pi verification while user is away.

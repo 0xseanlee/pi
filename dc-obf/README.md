@@ -35,6 +35,19 @@ dc obf --setupserver
 dc obf
 ```
 
+另開同一台 Pi、同一個 `sean` 帳號的 SSH 視窗，可隨時停止：
+
+```sh
+dc obf --close
+```
+
+手機輸入的 `dc obf —close` 也接受。會中止目前混淆程序，保存已接收的
+檔案並記錄取消，再讓 bot 下線；不刪除 token、頻道或歷史紀錄。
+已下線時重複執行只顯示已關閉。控制走本機私人 Unix socket，不靠
+程序名稱或過期 PID 殺程序，也不關閉其他 bot、更新或模板設定。
+原視窗仍可按 Ctrl+C。首次升級前已啟動的舊版沒有控制端，需先 Ctrl+C
+再 `dc obf --update`，用新版啟動後才能透過 `--close` 停止。
+
 要使用時才啟動，完成一份有效工作即下線。不是直接丟檔案就自動處理，
 請在 `upload` 使用 `/obf`。無須 Message Content Intent；來源會經過
 Discord。未套模板時仍可在原頻道使用 `/obf`，回覆原則與以往相同。
@@ -109,7 +122,8 @@ Based on Prometheus by Elias Oelschner, https://github.com/prometheus-lua/Promet
 [上游授權](https://github.com/prometheus-lua/Prometheus/blob/a98c50165f2a53f6d765a82eee60dfea53803445/LICENSE)。
 
 測試涵蓋私人 token 設定、頻道模板重跑及中斷恢復、原檔及產物保存、
-Discord 傳送失敗後保留檔案、附件指令、進度嵌入、單次退出、worker
+Discord 傳送失敗後保留檔案、跨程序 close 中止真實 worker 並保存取消
+紀錄、附件指令、進度嵌入、單次退出、worker
 逾時、拒絕原樣回傳、更新原子切換與鎖，以及自有安全 fixture 的
 混淆前後行為比較。測試不使用真實 Discord token 或上傳私人腳本。
 

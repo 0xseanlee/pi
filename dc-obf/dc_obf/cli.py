@@ -26,12 +26,16 @@ def main():
     mode = obf.add_mutually_exclusive_group()
     mode.add_argument('--setup', action='store_true', help='只設定 token，不啟動 bot。')
     mode.add_argument('--setupserver', action='store_true', help='建立 upload、processing、done 頻道模板，然後退出。')
+    mode.add_argument('--close', action='store_true', help='停止本帳號正在執行的 OBF，保留檔案與紀錄。')
     mode.add_argument('--status', action='store_true', help='顯示設定狀態，不連線 Discord。')
     mode.add_argument('--update', action='store_true', help='從 GitHub 抓取並測試新版；不啟動 bot。')
     # Phone keyboards sometimes replace the ASCII double dash with an em dash.
     args = parser.parse_args(['--' + s[1:] if s.startswith(('—', '–')) else s for s in sys.argv[1:]])
     try:
-        if args.update:
+        if args.close:
+            from .control import close_bot
+            return close_bot()
+        elif args.update:
             from .updater import update
             return update()
         elif args.setup:
