@@ -60,3 +60,21 @@ dc obf --update
 
 No background automation or continued work was scheduled. Only resume work when
 the user sends a new instruction; do not imply overnight changes will appear.
+
+- 2026-11-11: user requested `dc obf --setupserver`, a private dc-obf category
+  with upload / processing / done channels, and file retention. Setup runs once
+  then exits; repeated runs preserve marked channels/history, resume partial setup.
+  Missing Manage Channels prints an invite without Administrator permission.
+  Phone em/en dash forms are normalized to --. /obf stays attachment-based in
+  upload, no message-content intent or automatic attachment listener.
+- All received jobs persist privately under ~/.local/share/dc-obf/jobs/<ID>/
+  with input.lua, any output, JSON status/hash/message links. No automatic deletion;
+  release updates leave jobs alone. Discord transfer failure retains local files.
+  Rejected invalid extension/oversize attachment is not downloaded or archived.
+- Current official FAQ says Nitro up to 1 GB, Basic 50 MB, free 20 MB; API default
+  20 MiB with server boost/context differences. Personal Nitro is not all-channel
+  bot quota; interaction attachment_size_limit may be higher. Pinned discord.py
+  2.7.1 still has a conservative 10 MiB default Guild.filesize_limit. Engine still
+  caps input 2 MiB/output 8 MiB, distinct from platform upload limits.
+- New template/archive features are tested locally on Mac, no real Discord token,
+  no live template or Pi deployment tested while user is away. User must update.

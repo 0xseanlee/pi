@@ -15,17 +15,58 @@ dc obf --setup
 不要把 token 放入 GitHub、聊天或命令參數。
 
 ```sh
+dc obf --setupserver
+```
+
+在 bot 所在的私人伺服器建立 `dc-obf` 分類及三個文字頻道；多個伺服器
+時會列出名稱與 ID 供選擇。需要你是伺服器擁有者或有「管理伺服器」
+權限；bot 需要「管理頻道」及讀寫、嵌入、附件權限，缺少時會顯示
+重新授權連結。分類預設只允許你與 bot 檢視（管理員仍可檢視）。
+再次執行沿用工具建立的頻道，不刪除紀錄、不改動其他同名頻道。
+設定完成即退出；這個指令也接受手機鍵盤的 `—setupserver`。
+
+| 頻道 | 用途 |
+| --- | --- |
+| `upload` | 使用 `/obf`，在 `file` 選 `.lua`；bot 另貼原始檔備份 |
+| `processing` | 每份工作一則進度嵌入，顯示階段、耗時與工作 ID |
+| `done` | 保留 `protected.lua` 與完成紀錄，失敗也留下紀錄 |
+
+```sh
 dc obf
 ```
 
-Bot 上線後，在 Discord 使用 `/obf`，附件欄位 `file` 選 `.lua`。
-同一則嵌入訊息顯示收檔、檢查、VM 處理、完成／失敗與耗時。
-引擎未提供內部百分比，因此不顯示假百分比。完成後回傳
-`protected.lua` 並下線；格式錯誤的附件可重新選取。
+要使用時才啟動，完成一份有效工作即下線。不是直接丟檔案就自動處理，
+請在 `upload` 使用 `/obf`。無須 Message Content Intent；來源會經過
+Discord。未套模板時仍可在原頻道使用 `/obf`，回覆原則與以往相同。
+`/obf_status` 查看本次狀態。進度依實際階段更新，引擎沒有內部百分比。
 
-`/obf_status` 可查看本次狀態。來源會經過 Discord；這不是純本機傳檔。
-目前限 app 擁有者使用，來源限制 2 MiB，處理逾時 120 秒，輸出限制
-8 MiB 且不超過本次 interaction 的附件上限。worker 不直接執行上傳原碼。
+每份已接收工作在 Pi 的 `~/.local/share/dc-obf/jobs/<工作ID>/` 保存
+`input.lua`、成功產生的 `protected.lua` 和 `job.json`（時間、SHA-256、
+狀態、Discord 訊息連結）。目錄 0700、檔案 0600，與 release 分開；
+更新不清除紀錄，失敗與取消也保留已保存的內容，不自動到期刪除。
+超出引擎處理上限而遭拒絕的附件不會下載或備份。Pi 本機儲存空間
+用盡會停止工作，並非無限容量；Discord 訊息被刪除也不影響 Pi 副本。
+不要把 Discord CDN 暫時下載網址當成永久檔案索引。
+
+## Discord 上限與引擎上限
+
+截至 2026-11-11 查閱的 [Discord 檔案 FAQ](https://support.discord.com/hc/en-us/articles/25444343291031-File-Attachments-FAQ)：
+免費 20 MB、Nitro Basic 50 MB、Nitro 完整版最高 1 GB／檔；部分帳號
+有實驗限制，以客戶端實際顯示為準。官方部分舊頁仍列 Nitro 500 MB。
+
+[API 文件](https://docs.discord.com/developers/reference#uploading-files)
+目前列預設 20 MiB／檔；一般 bot 頻道上傳受伺服器額度限制，
+[Boost Level 2 / 3](https://support.discord.com/hc/en-us/articles/360028038352-Server-Boosting-FAQ)
+分別提供 50 / 100 MB，部分伺服器另有 250 MB 實驗加成。
+Slash 回覆使用 Discord 回傳的 `attachment_size_limit`，可能與一般
+bot 發訊息不同；你的個人 Nitro 不會讓所有 bot 頻道訊息自動享有 1 GB。
+
+**本工具目前另有限制：原檔 2 MiB、輸出 8 MiB、處理逾時 120 秒。**
+這是 Pi VM 引擎的處理限制，並非宣稱可處理 1 GB Lua。三頻道模式
+回檔採 `guild.filesize_limit`，原頻道模式採 `interaction.filesize_limit`；
+目前固定的 discord.py 2.7.1 對普通 guild 的預設仍保守列為 10 MiB。
+不硬編碼保證所有上下文均可達 20 MiB，實際傳送失敗仍保存 Pi 產物。
+worker 只解析／轉換，不直接執行上傳原碼。
 
 ```sh
 dc obf --status
@@ -67,7 +108,8 @@ Based on Prometheus by Elias Oelschner, https://github.com/prometheus-lua/Promet
 版本隔離儲存在 `~/.local/lib/dc-obf/backends/`，保留上游 LICENSE。
 [上游授權](https://github.com/prometheus-lua/Prometheus/blob/a98c50165f2a53f6d765a82eee60dfea53803445/LICENSE)。
 
-測試涵蓋私人 token 設定、附件指令、進度嵌入、單次退出、worker
+測試涵蓋私人 token 設定、頻道模板重跑及中斷恢復、原檔及產物保存、
+Discord 傳送失敗後保留檔案、附件指令、進度嵌入、單次退出、worker
 逾時、拒絕原樣回傳、更新原子切換與鎖，以及自有安全 fixture 的
 混淆前後行為比較。測試不使用真實 Discord token 或上傳私人腳本。
 
@@ -75,5 +117,6 @@ Based on Prometheus by Elias Oelschner, https://github.com/prometheus-lua/Promet
 python -m unittest discover -s tests -v
 ```
 
-Discord 真實登入、指令註冊、收檔回檔仍待使用者執行 setup 及開啟 bot。
+Discord 真實登入、套頻道模板、指令註冊、收檔回檔仍待使用者執行。
+本次變更在 Mac 驗證，尚未部署至離家的 Pi；請先完成 `dc obf --update`。
 完整研究背景：[research.md](research.md)。

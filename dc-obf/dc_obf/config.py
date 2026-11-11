@@ -24,6 +24,8 @@ def private_write(path, content):
     try:
         with os.fdopen(fd, 'w') as stream:
             stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
         os.replace(temporary, path)
     finally:
         Path(temporary).unlink(missing_ok=True)
@@ -87,6 +89,8 @@ def save_token(token):
     configuration = {**identity, 'token': token, 'engine_argv': previous.get('engine_argv') or [
         '{python}', '-m', 'dc_obf.prometheus_adapter', '{input}', '{output}',
     ]}
+    if previous.get('application_id') == identity['application_id'] and previous.get('server'):
+        configuration['server'] = previous['server']
     private_write(path, json.dumps(configuration) + '\n')
     pending.unlink(missing_ok=True)
     return configuration
@@ -99,7 +103,8 @@ def saved_token():
     return load_config()['token'] if config_path().exists() else ''
 
 
-def invite_url(application_id):
+def invite_url(application_id, *, manage_channels=False):
     return 'https://discord.com/oauth2/authorize?' + urlencode({
-        'client_id': application_id, 'scope': 'bot applications.commands', 'permissions': 35840,
+        'client_id': application_id, 'scope': 'bot applications.commands',
+        'permissions': 117776 if manage_channels else 117760,
     })

@@ -25,19 +25,26 @@ def main():
     obf = sub.add_parser('obf', help='啟動 OBF，一份工作結束後退出；Ctrl+C 可取消。')
     mode = obf.add_mutually_exclusive_group()
     mode.add_argument('--setup', action='store_true', help='只設定 token，不啟動 bot。')
+    mode.add_argument('--setupserver', action='store_true', help='建立 upload、processing、done 頻道模板，然後退出。')
     mode.add_argument('--status', action='store_true', help='顯示設定狀態，不連線 Discord。')
     mode.add_argument('--update', action='store_true', help='從 GitHub 抓取並測試新版；不啟動 bot。')
-    args = parser.parse_args()
+    # Phone keyboards sometimes replace the ASCII double dash with an em dash.
+    args = parser.parse_args(['--' + s[1:] if s.startswith(('—', '–')) else s for s in sys.argv[1:]])
     try:
         if args.update:
             from .updater import update
             return update()
         elif args.setup:
             setup()
+        elif args.setupserver:
+            os.umask(0o077)
+            from .server import setup_server
+            return setup_server(load_config())
         elif args.status:
             configuration = load_config()
             print('token 已保存；按需啟動，未設定常駐服務。')
             print('VM 混淆引擎：' + ('已設定外部命令' if configuration.get('engine_argv') else '尚未接上'))
+            print('三頻道模板：' + ('已設定' if configuration.get('server') else '未設定（dc obf --setupserver）'))
         else:
             os.umask(0o077)
             configuration = load_config()

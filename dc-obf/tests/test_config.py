@@ -48,10 +48,29 @@ class ConfigurationTests(unittest.TestCase):
     def test_invite_contains_no_token_or_admin_permission(self):
         url = config.invite_url(IDENTITY['application_id'])
         self.assertNotIn(TOKEN, url)
-        self.assertIn('permissions=35840', url)
+        self.assertIn('permissions=117760', url)
 
     def test_setup_requires_user_terminal(self):
         with patch('dc_obf.cli.sys.stdin.isatty', return_value=False), patch('dc_obf.cli.getpass.getpass') as prompt:
             with self.assertRaises(config.ConfigError):
                 cli.setup()
             prompt.assert_not_called()
+
+    def test_token_refresh_keeps_template_for_same_application(self):
+        with tempfile.TemporaryDirectory() as root, patch('dc_obf.config.Path.home', return_value=Path(root)), patch(
+            'dc_obf.config.validate_token', return_value=IDENTITY):
+            config.save_token(TOKEN)
+            cfg = config.load_config()
+            cfg['server'] = {'guild_id': 99, 'upload': 100, 'processing': 101, 'done': 102}
+            config.private_write(config.config_path(), json.dumps(cfg))
+            self.assertEqual(config.save_token(TOKEN)['server'], cfg['server'])
+            other = {**IDENTITY, 'application_id': 987654321}
+            with patch('dc_obf.config.validate_token', return_value=other):
+                self.assertNotIn('server', config.save_token(TOKEN))
+
+    def test_phone_dash_dispatches_setupserver_without_starting_worker(self):
+        with patch('dc_obf.cli.sys.argv', ['dc', 'obf', '—setupserver']), patch(
+            'dc_obf.cli.load_config', return_value={'token': TOKEN}), patch(
+            'dc_obf.server.setup_server', return_value=0) as setup_server, patch('dc_obf.cli.os.umask'):
+            self.assertEqual(cli.main(), 0)
+            setup_server.assert_called_once_with({'token': TOKEN})
