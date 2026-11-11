@@ -4,9 +4,10 @@
 - User wants to protect their own executor-side Lua/Luau code against copying.
   Target executor name/version and real-script compatibility remain unknown.
 - Exact interface: `dc obf --setup` asks only `token:` (hidden) and returns;
-  `dc obf` opens an on-demand foreground bot; Discord `/obf` takes a `.lua`
+  `dc obf` starts an on-demand background bot, detached from SSH; Discord `/obf` takes a `.lua`
   attachment in `file`, updates a progress embed, returns protected.lua and exits
-  after one eligible job. Ctrl+C cancels. No daemon or autostart.
+  after one eligible job. `--close` stops it; `--foreground` allows Ctrl+C.
+  No systemd unit or autostart. Background operation is explicitly user requested.
 - `--update` pulls public `0xseanlee/pi` main, package subdirectory `dc-obf/`.
   Preserve all other repo files. GitHub connector account is 0xseanlee; push/admin
   permissions verified and a real branch update succeeded. Pi needs no PAT to pull.
@@ -83,10 +84,24 @@ the user sends a new instruction; do not imply overnight changes will appear.
   a private local Unix socket while holding obf.run.lock. Stop cancels an active
   job, kills its engine process group, keeps saved files/cancelled job metadata,
   then disconnects Discord; close waits for run lock release before confirming.
-  No PID-based killing, no daemon, no token load required for close. Offline close
+  No PID-based killing, no autostart, no token load required for close. Offline close
   is harmless; update/template locks are not stopped. Old running versions need
   Ctrl+C before updating; they cannot gain a control socket retroactively.
 - Close validated on Mac using a separate bot process with mocked Discord I/O
   and a real sleeping subprocess worker. Worker exit, cancelled archive status,
   preserved input and socket cleanup all passed. 32 tests pass, 1 pinned backend
   fixture skipped. No live Discord/Pi verification while user is away.
+
+- Latest user correction: default `dc obf` must keep running after SSH/iSH closes.
+  It now spawns the current release's Python with --foreground, new OS session,
+  /dev/null stdin and private ~/.local/state/dc-obf/bot.log stdout/stderr. Token
+  is never passed on argv. A local launch lock and run lock avoid duplicates.
+  --status asks the private control socket for connecting/online/processing/stopping;
+  launch does not falsely label a pending connection authenticated. --close remains
+  local and cancels work; one eligible job still ends the bot. No reboot autostart.
+- User screenshot shows Safari saved .lua.txt (8 KB). Accept .lua and .lua.txt
+  case-insensitively, same size/UTF-8/content checks; do not accept arbitrary .txt.
+- Background integration tested with a real detached bot process (Discord mocked):
+  launching process group received SIGHUP and exited, background bot stayed alive,
+  second launch reused it, close stopped it, logs are 0600. 35 tests passed, 1
+  pinned backend fixture skipped on Mac. Actual Pi logout/Discord remain untested.

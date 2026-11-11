@@ -36,7 +36,7 @@ class OBFClient(discord.Client):
         self.outcome = 0
         self.job_task = None
         self.tree.add_command(app_commands.Command(
-            name='obf', description='上傳 .lua 檔進行 VM 混淆；本次工作結束後 bot 下線。', callback=self.obfuscate,
+            name='obf', description='上傳 .lua 或 .lua.txt 檔進行 VM 混淆；本次工作結束後 bot 下線。', callback=self.obfuscate,
         ))
         self.tree.add_command(app_commands.Command(
             name='obf_status', description='查看本次 bot 與混淆引擎狀態。', callback=self.status,
@@ -100,8 +100,8 @@ class OBFClient(discord.Client):
         except EngineError as error:
             await interaction.response.send_message(str(error), ephemeral=True)
             return
-        if not file.filename.lower().endswith('.lua') or file.size > MAX_SOURCE:
-            await interaction.response.send_message('混淆引擎目前接受不超過 2 MiB 的 .lua 原始檔。', ephemeral=True)
+        if not file.filename.lower().endswith(('.lua', '.lua.txt')) or file.size > MAX_SOURCE:
+            await interaction.response.send_message('請上傳不超過 2 MiB 的 .lua 或 .lua.txt 原始檔。', ephemeral=True)
             return
         self.busy = True
         self.job_task = asyncio.current_task()

@@ -30,7 +30,7 @@ def running():
 
 
 @contextlib.asynccontextmanager
-async def listener():
+async def listener(state=None):
     # The caller holds obf.run.lock throughout listener lifetime and shutdown.
     path = control_path()
     path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
@@ -43,9 +43,14 @@ async def listener():
 
     async def request(reader, writer):
         try:
-            if await asyncio.wait_for(reader.readline(), timeout=2) == b'close\n':
+            command = await asyncio.wait_for(reader.readline(), timeout=2)
+            if command == b'close\n':
                 stop.set()
                 writer.write(b'stopping\n')
+                await writer.drain()
+            elif command == b'status\n':
+                value = 'stopping' if stop.is_set() else state() if state else 'connecting'
+                writer.write((value + '\n').encode('ascii'))
                 await writer.drain()
         except (TimeoutError, OSError, ValueError):
             pass
@@ -65,7 +70,10 @@ async def listener():
 
 
 async def serve(client, token):
-    async with listener() as stop:
+    def state():
+        return 'processing' if client.busy else 'online' if client.is_ready() else 'connecting'
+
+    async with listener(state) as stop:
         connection = asyncio.create_task(client.start(token))
         stopping = asyncio.create_task(stop.wait())
         try:
@@ -83,7 +91,28 @@ async def serve(client, token):
             await asyncio.gather(stopping, connection, return_exceptions=True)
 
 
+def bot_state():
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(1)
+            connection.connect(str(control_path()))
+            connection.sendall(b'status\n')
+            with connection.makefile('rb') as response:
+                value = response.readline(128).decode('ascii').strip()
+        if value in ('connecting', 'online', 'processing', 'stopping'):
+            return value
+    except (OSError, UnicodeError):
+        pass
+    return 'busy' if running() else 'offline'
+
+
 def close_bot(timeout=15):
+    from .updater import lock
+    with lock('obf.launch.lock'):
+        return _close_bot(timeout)
+
+
+def _close_bot(timeout):
     path = control_path()
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:

@@ -98,7 +98,7 @@ class BotTests(unittest.IsolatedAsyncioTestCase):
         interaction = types.SimpleNamespace(id=43, user=types.SimpleNamespace(id=cfg['owner_id']),
             response=types.SimpleNamespace(defer=AsyncMock(), send_message=AsyncMock()),
             edit_original_response=AsyncMock())
-        attachment = types.SimpleNamespace(filename='source.lua', size=10, read=AsyncMock(return_value=b'return 123'))
+        attachment = types.SimpleNamespace(filename='source.lua.txt', size=10, read=AsyncMock(return_value=b'return 123'))
         with tempfile.TemporaryDirectory() as root, patch('dc_obf.archive.Path.home', return_value=Path(root)), patch(
             'dc_obf.bot.transform', side_effect=EngineError('引擎失敗')):
             await client.obfuscate(interaction, attachment)

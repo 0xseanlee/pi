@@ -18,7 +18,8 @@ class ControlTests(unittest.TestCase):
     def test_close_when_offline_is_harmless_and_needs_no_token(self):
         with tempfile.TemporaryDirectory(dir='/tmp') as root, patch('dc_obf.control.Path.home', return_value=Path(root)), contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(control.close_bot(), 0)
-            self.assertFalse((Path(root)/'.config').exists())
+            self.assertFalse(control.control_path().exists())
+            self.assertFalse((Path(root)/'.config/dc/obf.json').exists())
 
     def test_no_socket_does_not_stop_update_or_other_process(self):
         with tempfile.TemporaryDirectory(dir='/tmp') as root, patch('dc_obf.control.Path.home', return_value=Path(root)):

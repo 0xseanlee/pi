@@ -8,7 +8,7 @@ from .config import ConfigError, config_path, invite_url, private_write
 from .updater import lock
 
 CHANNELS = {
-    'upload': '在此使用 /obf，file 選 .lua；保留每次原始檔。',
+    'upload': '在此使用 /obf，file 選 .lua 或 .lua.txt；保留每次原始檔。',
     'processing': '每份工作以同一則嵌入訊息更新實際階段與耗時。',
     'done': '保留混淆產物、完成與失敗紀錄；bot 處理一份後下線。',
 }

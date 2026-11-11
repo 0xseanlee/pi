@@ -1,7 +1,8 @@
 # DC OBF
 
 樹莓派上的按需、單次 Discord Lua VM 混淆 bot。私人伺服器操作，
-不設定常駐服務或開機啟動；處理一份有效工作後退出，Ctrl+C 也可取消。
+執行 `dc obf` 即在背景等候，可關閉 SSH。處理一份有效工作後退出，
+也可用 `dc obf --close` 停止；不設定開機自動啟動。
 
 ## 操作
 
@@ -27,7 +28,7 @@ dc obf --setupserver
 
 | 頻道 | 用途 |
 | --- | --- |
-| `upload` | 使用 `/obf`，在 `file` 選 `.lua`；bot 另貼原始檔備份 |
+| `upload` | 使用 `/obf`，在 `file` 選 `.lua` 或 `.lua.txt`；bot 另貼原始檔備份 |
 | `processing` | 每份工作一則進度嵌入，顯示階段、耗時與工作 ID |
 | `done` | 保留 `protected.lua` 與完成紀錄，失敗也留下紀錄 |
 
@@ -35,7 +36,13 @@ dc obf --setupserver
 dc obf
 ```
 
-另開同一台 Pi、同一個 `sean` 帳號的 SSH 視窗，可隨時停止：
+執行後會返回命令列，bot 以獨立 session 在背景連線／等待；關閉 iSH 或
+SSH 不會因終端機掛斷而停止 bot。不用額外加 `&`、nohup 或維持視窗。
+畫面會區分「背景連線中」與「已上線」，前者不是已驗證 Discord 登入。
+重複執行 `dc obf` 不會重複啟動；`dc obf --status` 可查本機控制端狀態。
+記錄保存在 `~/.local/state/dc-obf/bot.log`（0600），不寫入 repo。
+
+重新 SSH 到同一台 Pi、同一個 `sean` 帳號，可隨時停止：
 
 ```sh
 dc obf --close
@@ -45,11 +52,14 @@ dc obf --close
 檔案並記錄取消，再讓 bot 下線；不刪除 token、頻道或歷史紀錄。
 已下線時重複執行只顯示已關閉。控制走本機私人 Unix socket，不靠
 程序名稱或過期 PID 殺程序，也不關閉其他 bot、更新或模板設定。
-原視窗仍可按 Ctrl+C。首次升級前已啟動的舊版沒有控制端，需先 Ctrl+C
+需要留在前景除錯時可用 `dc obf --foreground`，在該視窗 Ctrl+C 取消。
+首次升級前已啟動的舊版沒有控制端，需先 Ctrl+C
 再 `dc obf --update`，用新版啟動後才能透過 `--close` 停止。
 
 要使用時才啟動，完成一份有效工作即下線。不是直接丟檔案就自動處理，
-請在 `upload` 使用 `/obf`。無須 Message Content Intent；來源會經過
+請在 `upload` 使用 `/obf`。Safari 把 Lua 下載成 `.lua.txt` 也接受，
+會與 `.lua` 一樣檢查 UTF-8、大小和內容，原始檔名記在工作紀錄中。
+一般 `.txt` 不會自動當成 Lua。無須 Message Content Intent；來源會經過
 Discord。未套模板時仍可在原頻道使用 `/obf`，回覆原則與以往相同。
 `/obf_status` 查看本次狀態。進度依實際階段更新，引擎沒有內部百分比。
 
@@ -122,6 +132,7 @@ Based on Prometheus by Elias Oelschner, https://github.com/prometheus-lua/Promet
 [上游授權](https://github.com/prometheus-lua/Prometheus/blob/a98c50165f2a53f6d765a82eee60dfea53803445/LICENSE)。
 
 測試涵蓋私人 token 設定、頻道模板重跑及中斷恢復、原檔及產物保存、
+背景啟動、原啟動 session 收到 SIGHUP 後仍存活、不重複啟動、私人記錄、
 Discord 傳送失敗後保留檔案、跨程序 close 中止真實 worker 並保存取消
 紀錄、附件指令、進度嵌入、單次退出、worker
 逾時、拒絕原樣回傳、更新原子切換與鎖，以及自有安全 fixture 的
