@@ -15,7 +15,7 @@ class UpdateTests(unittest.TestCase):
             (root/'current').symlink_to(old)
             with self.assertRaises(RuntimeError):
                 activate(root, new)
-            self.assertEqual((root/'current').resolve(), old)
+            self.assertEqual((root/'current').resolve(), old.resolve())
 
     def test_atomic_activation_keeps_previous(self):
         with tempfile.TemporaryDirectory() as root:
@@ -24,8 +24,8 @@ class UpdateTests(unittest.TestCase):
             old.mkdir(); new.mkdir(); (new/'.ready').touch()
             (root/'current').symlink_to(old)
             activate(root, new)
-            self.assertEqual((root/'current').resolve(), new)
-            self.assertEqual((root/'previous').resolve(), old)
+            self.assertEqual((root/'current').resolve(), new.resolve())
+            self.assertEqual((root/'previous').resolve(), old.resolve())
 
     def test_concurrent_run_or_update_is_rejected(self):
         with tempfile.TemporaryDirectory() as root, patch('dc_obf.updater.Path.home', return_value=Path(root)):

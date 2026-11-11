@@ -47,7 +47,7 @@ def main():
     except KeyboardInterrupt:
         print('\n已結束。')
         return 130
-    except ConfigError as error:
+    except (ConfigError, RuntimeError) as error:
         print(str(error), file=sys.stderr)
         return 1
     except Exception as error:

@@ -55,6 +55,7 @@ def activate(root, release):
 
 
 def update():
+    from .dependencies import install_release
     os.umask(0o077)
     root = Path.home() / '.local/share/dc-obf'
     releases = root / 'releases'
@@ -83,7 +84,7 @@ def update():
                 print('建立獨立環境並測試新版…', flush=True)
                 execute([sys.executable, '-m', 'venv', str(environment)])
                 python = str(environment / 'bin/python')
-                execute([python, '-m', 'pip', 'install', '--quiet', str(package)], timeout=300)
+                install_release(python, package, release, root / 'dependency-wheels')
                 execute([python, '-m', 'dc_obf.bootstrap_backend'], timeout=90)
                 execute([python, '-m', 'unittest', 'discover', '-s', 'tests', '-v'], cwd=package)
                 execute([python, '-m', 'dc_obf.cli', 'obf', '--help'], capture=True)

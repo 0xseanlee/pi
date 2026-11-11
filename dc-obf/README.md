@@ -42,6 +42,16 @@ venv 安裝、測試，通過才原子切換 `current`。失敗保留舊版，�
 或斷電，不會啟用沒有 `.ready` 標記的版本；重新執行 update 可重試。
 執行中的 bot 與更新互斥。首次 bootstrap 使用 `~/dc-tools`。
 
+套件依賴會依 Python 平台與 pyproject 需求保存成有 SHA-256 校驗的
+本機 wheel 快取。首次準備快取仍需連上 PyPI；之後依賴不變時，
+建置與安裝使用 `--no-index`，不重查套件站。下載僅針對此更新程序
+使用官方 PyPI，保留 TLS 驗證、憑證與代理設定，不更改系統 pip 設定。
+
+若看到反覆 `SSLEOFError`／`RemoteDisconnected`，可以 Ctrl+C 停止
+更新，原本已啟用版本仍在。可先執行 `dc obf --setup` 和 `dc obf`，
+等網路穩定再更新。注意舊 updater 首次升到這個版本時，仍使用舊的
+安裝路徑；需至少一次完成升級，新的依賴快取機制才會生效。
+
 穩定入口是 `~/dc-tools/bin/dc`，系統短指令 `/usr/local/bin/dc`
 指向它；入口選擇已測試的新版本或原本 bootstrap。
 
